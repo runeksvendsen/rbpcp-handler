@@ -1,0 +1,70 @@
+name: rbpcp-handler
+version: '0.1.0.0'
+category: Bitcoin Finance Network
+author: Rune K. Svendsen
+maintainer: runesvend@gmail.com
+copyright: 2017 Rune K. Svendsen
+license: BSD3
+github: runeksvendsen/rbpcp-handler
+
+dependencies:
+- base >=4.7 && <5
+- bitcoin-payment-channel
+- blockchain-restful-address-index-api
+- bitcoin-spv-wallet
+- servant-client
+- servant
+- rbpcp-api
+- http-types
+- string-conversions
+- text
+- haskoin-core
+- mtl
+- exceptions
+- http-client
+- http-client-tls
+- errors
+- data-default-class
+- aeson
+- time
+
+library:
+  source-dirs: src
+  exposed-modules:
+  - Lib
+  - App
+  - MyPrelude
+  other-modules:
+  - RBPCP.Handler.FundingInfo
+#  - RBPCP.Handler.Open
+  dependencies:
+  - servant-server
+  - wai
+  - warp
+
+executables:
+  rbpcp-handler-exe:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - rbpcp-handler
+
+tests:
+  rbpcp-handler-test:
+#    other-modules:
+#    - TestPrelude
+#    - BlockchainInfo
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - rbpcp-handler
+    - hspec
+    - QuickCheck
