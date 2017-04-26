@@ -9,8 +9,12 @@ packages:
 ## App
 - '.'
 - '/Users/rune/IdeaProjects/blockchain-restful-address-index/blockchain-restful-address-index-api'
+- '/Users/rune/IdeaProjects/promissory-note-app/bitcoin-signer'
 - '/Users/rune/IdeaProjects/promissory-note-app/bitcoin-spv-wallet'
 - '/Users/rune/IdeaProjects/promissory-note-app/rbpcp-api'
+- '/Users/rune/IdeaProjects/promissory-note-app/paychan-datastore'
+- '/Users/rune/IdeaProjects/promissory-note-app/promissory-note-types'
+- '/Users/rune/IdeaProjects/bitcoin-payment-channel'
 ## Extra deps
 - location:
     git: https://github.com/runeksvendsen/haskoin.git
@@ -20,10 +24,10 @@ packages:
     - haskoin-core
     - haskoin-node
     - haskoin-wallet
-- location:
-    git: https://github.com/runeksvendsen/bitcoin-payment-channel.git
-    commit: d39ca379edb9797dea5eb9a519ccfd5812fd7ad7
-  extra-dep: true
+#- location:
+#    git: https://github.com/runeksvendsen/bitcoin-payment-channel.git
+#    commit: 81b77ab346b75b3a5dfb8d49d8925e0d3f0478e1
+#  extra-dep: true
 - location:
     git: https://github.com/runeksvendsen/bitcoin-payment-protocol.git
     commit: da60b36560ba48642f0c80f2944921d2ce7ef37d
@@ -61,11 +65,11 @@ extra-deps:
 - cryptohash-sha256-0.11.100.1
 - proto-lens-0.1.0.5
 - Concurrent-Cache-0.2.2.3
-# rbpcp-handler
 - concurrent-extra-0.7.0.10
 - daemons-0.2.1
 - esqueleto-2.5.1
-
+- rate-limit-1.1.1
+- time-units-1.0.0
 
 flags: {}
 extra-package-dbs: []

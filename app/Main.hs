@@ -3,4 +3,4 @@ module Main where
 import App
 
 main :: IO ()
-main = startApp
+main = runApp

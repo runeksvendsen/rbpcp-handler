@@ -7,43 +7,74 @@ copyright: 2017 Rune K. Svendsen
 license: BSD3
 github: runeksvendsen/rbpcp-handler
 
+default-extensions:
+- RecordWildCards
+- OverloadedStrings
+- MultiParamTypeClasses
+- DataKinds
+- FlexibleContexts
+- LambdaCase
+- TypeOperators
+- TypeSynonymInstances
+- FlexibleInstances
+- ScopedTypeVariables
+
 dependencies:
 - base >=4.7 && <5
+## Local
 - bitcoin-payment-channel
-- blockchain-restful-address-index-api
+- bitcoin-signer
+- paychan-datastore
 - bitcoin-spv-wallet
+- blockchain-restful-address-index-api
+- promissory-note-types
+- rbpcp-api
+## External
+- haskoin-core
 - servant-client
 - servant
-- rbpcp-api
 - http-types
 - string-conversions
 - text
-- haskoin-core
+- base16-bytestring
 - mtl
 - exceptions
 - http-client
 - http-client-tls
 - errors
+- either
 - data-default-class
 - aeson
 - time
+- monad-time
+- tagged
+- http-api-data
+- monad-logger
+- cereal
+- zeromq4-haskell
+- persistent-sqlite
+- Concurrent-Cache
+- transformers-base
 
 library:
+  ghc-options:
+  - -Wall
   source-dirs: src
   exposed-modules:
-  - Lib
+  - RBPCP.Handler.FundingInfo
+  - RBPCP.Handler.Open
+  - RBPCP.Handler.Pay
+  - RBPCP.Handler.Close
+  - RBPCP.Server
   - App
   - MyPrelude
-  other-modules:
-  - RBPCP.Handler.FundingInfo
-#  - RBPCP.Handler.Open
   dependencies:
   - servant-server
   - wai
   - warp
 
 executables:
-  rbpcp-handler-exe:
+  rbpcp-server:
     main: Main.hs
     source-dirs: app
     ghc-options:
@@ -53,18 +84,18 @@ executables:
     dependencies:
     - rbpcp-handler
 
-tests:
-  rbpcp-handler-test:
-#    other-modules:
-#    - TestPrelude
-#    - BlockchainInfo
-    main: Spec.hs
-    source-dirs: test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - rbpcp-handler
-    - hspec
-    - QuickCheck
+#tests:
+#  rbpcp-handler-test:
+##    other-modules:
+##    - TestPrelude
+##    - BlockchainInfo
+#    main: Spec.hs
+#    source-dirs: test
+#    ghc-options:
+#    - -threaded
+#    - -rtsopts
+#    - -with-rtsopts=-N
+#    dependencies:
+#    - rbpcp-handler
+#    - hspec
+#    - QuickCheck

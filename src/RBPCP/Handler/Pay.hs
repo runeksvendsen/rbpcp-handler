@@ -1,17 +1,61 @@
 module RBPCP.Handler.Pay where
 
---import           PayChanServer.Types
---import           PayChanServer.Util
---import qualified PayChanServer.Config.Types as Conf
-import qualified RBPCP.Types as RBPCP
---import qualified PayChanServer.DB as DB
---import           ChanStore.Interface  as DBConn
---import           PayChanServer.Callback.Interface as CB
---import           AppPrelude.Man (PayBeginRequest(..), PayBeginResult(..), UpdateResult(..))
+import RBPCP.Handler.Internal.Util
+import Settings
+import Conf
+import Servant.Server
+import Control.Monad.Time
+import Control.Monad.Catch
+
+import qualified Servant.Client               as SC
+import qualified Servant.Server               as SS
+import qualified RBPCP.Types                  as RBPCP
+import qualified RBPCP.Api                    as API
+import qualified PaymentChannel               as PC
+import qualified ChanDB                       as DB
+import qualified Bitcoin.SPV.Wallet           as Wall
+import qualified Bitcoin.SPV.Wallet.Extra     as Wall
+import qualified Network.Haskoin.Crypto       as HC
+import qualified Network.Haskoin.Transaction  as HT
+
+
+payE :: ( DB.ChanDBTx m dbM dbH
+        , MonadIO m
+        ) =>
+        RBPCP.BtcTxId
+     -> Word32
+     -> Maybe HC.Hash256
+     -> RBPCP.Payment
+     -> EitherT (HandlerErr PC.PayChanError) m RBPCP.PaymentResult
+payE _        _        Nothing       _                              = left $ UserError ResourceNotFound
+payE fundTxId fundIdx (Just secret) (RBPCP.Payment payData appData) = do
+    maybeRedirect (fundTxId, fundIdx, secret) payData
+
+    let throwNotFound = maybe (left $ UserError ResourceNotFound) return
+    (newState, payVal) <- abortOnErr  =<< liftIO . PC.acceptPayment payData
+                                      =<< throwNotFound
+                                      =<< lift (DB.getPayChan $ PC.fromHash secret)
+
+    -- TODO: "callback payVal appData"
+
+    -- Save state to DB
+    lift $ DB.updatePayChan newState
+
+    return RBPCP.PaymentResult
+           { paymentResult_channel_status     =
+                  if PC.availableChannelVal newState /= 0
+                      then RBPCP.ChannelOpen
+                      else RBPCP.ChannelClosed
+           , paymentResult_channel_valueLeft  = fromIntegral $ PC.availableChannelVal newState
+           , paymentResult_value_received     = fromIntegral payVal
+           , paymentResult_settlement_txid    = Nothing
+           , paymentResult_application_data   = ""
+           }
+
+
 
 
 {-
-
 data CallbackInfo = CallbackInfo
   { amount              :: BtcAmount
   , chan_value_left     :: BtcAmount
@@ -23,33 +67,13 @@ data CallbackInfo = CallbackInfo
 data CallbackResponse = CallbackResponse
   { resp_app_data       :: T.Text
   , resp_app_error      :: Maybe T.Text
-  } deriving (Generic, FromJSON, ToJSON)
-
+  } 
 -}
 
-chanPayHandler ::
-       PayChanConf m
-    => SendPubKey
-    -> LockTimeDate
-    -> TxHash
-    -> Vout
-    -> RBPCP.Payment
-    -> m PaymentResult
-chanPayHandler sendPK lockTime fundTxId fundIdx (RBPCP.Payment payment appData) = do
-    -- TODO: verify resource/payment match
-    dbConn <- confGet Conf.dbInterface
-    -- TODO: Payment handle
-    let valRecvd = undefined
-        valLeft = undefined
-        chanTotalValue = undefined
-    -- Contact the content delivery service for application response data
-    callbackConn <- confGet Conf.callbackIface
-    let payInfo = CB.CallbackInfo valRecvd valLeft chanTotalValue appData payment
-    (CB.CallbackResponse payData errM) <- DB.tryDBRequest (CB.valueReceived callbackConn payInfo)
-    return PaymentResult
-               { paymentResult_channel_status     = ChannelOpen
-               , paymentResult_channel_valueLeft  = valLeft
-               , paymentResult_value_received     = valRecvd
-               , paymentResult_settlement_txid    = Nothing
-               , paymentResult_application_data   = payData
-               }
+
+
+
+
+
+
+
