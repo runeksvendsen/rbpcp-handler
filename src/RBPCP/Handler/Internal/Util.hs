@@ -22,7 +22,8 @@ import qualified Control.Monad.Reader         as Reader
 import qualified Network.Haskoin.Crypto       as HC
 import qualified Control.Monad.Logger         as Log
 import qualified Servant.Server               as SS
-
+import qualified Servant.Client               as SC
+import           Network.Bitcoin.AddrIndex.API  (PublishTx, PushTxReq(..))
 
 
 runAtomic :: DB.ChanDBTx m dbM dbH
@@ -30,8 +31,19 @@ runAtomic :: DB.ChanDBTx m dbM dbH
           -> HandlerM dbH a
 runAtomic atomicET = do
     cfg <- getDbConf
-    let atomicEitherT = DB.atomically DB.PayChanDB cfg $ runEitherT atomicET
-    handleErrorE =<< handleErrorE =<< liftIO atomicEitherT
+    let atomic = DB.atomically DB.PayChanDB cfg $ runEitherT atomicET
+    handleErrorE =<< handleErrorE =<< liftIO atomic
+
+runNonAtomic ::
+    ( IsHandlerException e
+    , DB.ChanDB m dbH
+    )
+    => EitherT (HandlerErr e) m a
+    -> HandlerM dbH a
+runNonAtomic atomicET = do
+    cfg <- getDbConf
+    let nonAtomic = DB.runDB cfg $ runEitherT atomicET
+    handleErrorE =<< handleErrorE =<< liftIO nonAtomic
 
 maybeRedirect :: Monad m
     => (RBPCP.BtcTxId, Word32, HC.Hash256)
@@ -42,12 +54,34 @@ maybeRedirect (txid,vout,s) RBPCP.PaymentData{..} =
        || paymentDataFundingVout /= vout) redirect
             where redirect = left $ UserError $ ResourcePaymentMismatch txid vout s
 
-
 abortOnErr :: Monad m => Either e a -> EitherT (HandlerErr e) m a
 abortOnErr = hoistEither . fmapL HandlerErr
 
 abortWithErr :: Monad m => e -> EitherT (HandlerErr e) m a
 abortWithErr = left . HandlerErr
+
+generalErr :: Monad m => HandlerErr e -> EitherT (HandlerErr e) m a
+generalErr = left
+
+liftDb :: (Monad m, Monad (t m), Reader.MonadTrans t) => m a -> (t (t m)) a
+liftDb = lift . lift
+
+{-
+class MayReturnError e m where
+    abortWithErr  :: e -> m a
+    abortOnErr    :: Either e a -> m a
+    generalErr    :: HandlerErr e -> m a
+
+instance Monad m => MayReturnError e (EitherT (HandlerErr e) m) where
+    abortOnErr = hoistEither . fmapL HandlerErr
+    abortWithErr = left . HandlerErr
+    generalErr = left
+
+instance Monad m => MayReturnError e (ReaderT a (EitherT (HandlerErr e) m)) where
+    abortOnErr = lift . abortOnErr
+    abortWithErr = lift . abortWithErr
+    generalErr = lift . generalErr
+-}
 
 handleErrorE ::
     ( MonadError SS.ServantErr m
@@ -74,3 +108,7 @@ handlerRunDb m =
     getDbConf >>= liftIO . (`DB.runDB` m) >>= handleErrorE
 
 
+publishTx :: BitcoinTx -> SC.ClientM ()
+publishTx = void . SC.client api . PushTxReq
+    where api :: Proxy PublishTx
+          api  = Proxy

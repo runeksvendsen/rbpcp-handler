@@ -20,7 +20,7 @@ import qualified Network.Haskoin.Transaction  as HT
 
 
 payE :: ( DB.ChanDBTx m dbM dbH
-        , MonadIO m
+        -- , MonadIO m
         ) =>
         RBPCP.BtcTxId
      -> Word32
@@ -67,7 +67,7 @@ data CallbackInfo = CallbackInfo
 data CallbackResponse = CallbackResponse
   { resp_app_data       :: T.Text
   , resp_app_error      :: Maybe T.Text
-  } 
+  }
 -}
 
 

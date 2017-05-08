@@ -16,52 +16,59 @@ import qualified Network.Haskoin.Transaction  as HT
 
 
 runOpen :: DB.ChanDB m dbH
-        => EitherT (HandlerErr OpenErr) m RBPCP.PaymentResult
+        => ReaderT (HandlerConf dbH) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
         -> HandlerM dbH RBPCP.PaymentResult
-runOpen payET = do
-    cfg <- getDbConf
-    let atomicEitherT = DB.runDB cfg $ runEitherT payET
-    handleErrorE =<< handleErrorE =<< liftIO atomicEitherT
+runOpen openET = do
+    cfg <- getAppConf
+    runNonAtomic $ runReaderT openET cfg
+    -- let runner = DB.runDB cfg $ runEitherT eitherTM
+    -- handleErrorE =<< handleErrorE =<< liftIO runner
 
 openE ::
      ( DB.ChanDB m conf
-     , MonadIO m
+     -- , HasDb
+     -- , MonadIO m
      )
-    => Maybe Wall.ConfirmationInfo
-    -> RBPCP.BtcTxId
+    => RBPCP.BtcTxId
     -> Word32
     -> Maybe HC.Hash256
     -> RBPCP.Payment
-    -> EitherT (HandlerErr OpenErr) m RBPCP.PaymentResult
-openE _             _        _        Nothing       _                                  = left $ UserError ResourceNotFound
-openE Nothing       fundTxId _        _             _                                  = abortWithErr $ TxNotFound fundTxId
-openE (Just cInfo)  fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData appData) = do
-    maybeRedirect (fundTxId, fundIdx, secret) paymentData
+    -> ReaderT (HandlerConf conf) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
+openE _        _        Nothing       _                                  = lift $ left $ UserError ResourceNotFound
+openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData appData) = do
+    lift $ maybeRedirect (fundTxId, fundIdx, secret) paymentData
+
+    --    1. Get confirmation proof
+    iface <- wallIface
+    let txid = RBPCP.btcTxId fundTxId
+    cInfo <- maybe (lift $ abortWithErr $ TxNotFound fundTxId) return
+              =<< lift . hoistEither . fmapL InternalErr
+              =<< internalReq Settings.confProofServer (Wall.getConfProof iface txid)
 
     let confs = Wall.ciConfCount cInfo
     when (fromIntegral confs < Settings.confMinBtcConf) $
-        abortWithErr $ InsufficientConfCount (fromIntegral confs) Settings.confMinBtcConf
+        lift $ abortWithErr $ InsufficientConfCount (fromIntegral confs) Settings.confMinBtcConf
 
     --    2. Verify payment/Create state object
     let tx = Wall.proof_tx_data $ Wall.ciFundProof cInfo
-    (chanState, val) <- abortOnErr =<< fmapL OpeningPaymentError <$>
+    (chanState, val) <- lift . abortOnErr =<< fmapL OpeningPaymentError <$>
             liftIO (PC.channelFromInitialPayment tx paymentData)
     when (val < Settings.confOpenPrice) $
-        abortWithErr $ InitialPaymentShort val Settings.confOpenPrice
+        lift $ abortWithErr $ InitialPaymentShort val Settings.confOpenPrice
     let stateSecret = PC.toHash $ PC.getSecret chanState
     when (secret /= stateSecret) $
-        abortWithErr $ BadSharedSecret stateSecret
+        lift $ abortWithErr $ BadSharedSecret stateSecret
 
     --    3. PubKey-DB: Lookup
     let recvPubKey = PC.getRecvPubKey chanState
-    pkIndexM <- lift $ DB.pubKeyLookup Settings.confServerExtPub recvPubKey
-    chanStateX <- abortOnErr $ case pkIndexM of
+    pkIndexM <- lift $ lift $ DB.pubKeyLookup Settings.confServerExtPub recvPubKey
+    chanStateX <- lift $ abortOnErr $ case pkIndexM of
         Nothing  -> Left  $ NoSuchServerPubKey $ PC.getPubKey recvPubKey
         Just pki -> Right $ PC.setMetadata chanState (DB.kaiIndex pki)
 
     --    4. ChanDB: mark pubKey as used & insert PayChanState
-    _ <- lift $ DB.pubKeyMarkUsed Settings.confServerExtPub recvPubKey
-    lift $ DB.create chanStateX
+    _ <- lift $ lift $ DB.pubKeyMarkUsed Settings.confServerExtPub recvPubKey
+    lift $ lift $ DB.create chanStateX
 
     return RBPCP.PaymentResult
            { paymentResult_channel_status     = RBPCP.ChannelOpen
@@ -81,24 +88,6 @@ data OpenErr
   | OpeningPaymentError PC.PayChanError
 
 
-getConfProof ::
-       RBPCP.BtcTxId
-    -> HandlerM dbH (Maybe Wall.ConfirmationInfo)
-getConfProof tid = do
-    --    1. get confirmation info for fundingTxId
-    iface <- wallIface
-    let txid = RBPCP.btcTxId tid
-    handleErrorE =<< liftIO (runProofSC $ Wall.getConfProof iface txid)
-
-
--- Util
-runProofSC :: MonadIO m => SC.ClientM a -> m (Either InternalError a)
-runProofSC req = do
-    man <- liftIO newTlsManager
-    resE <- liftIO $ SC.runClientM req (clientEnv man)  -- TODO: error handling/Control.Retry
-    return $ fmapL (RequestError Settings.confProofServer) resE
-  where
-    clientEnv m = SC.ClientEnv m Settings.confProofServer
 
 
 instance IsHandlerException OpenErr where

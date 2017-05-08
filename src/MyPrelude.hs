@@ -9,12 +9,13 @@ module MyPrelude
 , HTTP.Manager, HTTP.newManager, tlsManagerSettings, newTlsManager
 , HT.TxHash
 , Log.runStdoutLoggingT
-, Reader.asks
-, Reader.runReaderT
+
 , PC.PayChanError
 , BitcoinTx
 )
 where
+
+import RBPCP.Internal.Manager
 
 import Data.String (fromString)
 import Data.String.Conversions (cs)
@@ -45,7 +46,7 @@ import Text.Read (readMaybe)
 
 
 import Control.Monad.Time as X
--- runReq
+
 import qualified Servant.Server as SS
 import qualified Servant.Client as SC
 import           Data.EitherR               (fmapL)
@@ -62,7 +63,7 @@ import qualified Web.HttpApiData              as Web
 import qualified Servant.Utils.Links          as SL
 import qualified Bitcoin.SPV.Wallet           as Wall
 import qualified Data.ByteString.Base16       as B16
-import qualified Control.Monad.Reader as Reader
+import Control.Monad.Reader as X
 import Control.Monad.Trans.Either as X
 import Control.Monad.Base         as X
 -- import qualified Conf
@@ -75,6 +76,14 @@ type PubKeyGetter = IO (Either PubKeyDbException DB.KeyAtIndex)
 newtype PubKeyDbException = PubKeyDbException DB.ChanDBException
     deriving (Eq, Show)
 
+
+internalReq
+    :: (MonadIO m, HasReqMan m)
+    => SC.BaseUrl
+    -> SC.ClientM a
+    -> m (Either InternalError a)
+internalReq url req =
+    fmapL (RequestError url) <$> handlerReq url req
 
 
 -- Handler error response
@@ -89,7 +98,7 @@ instance Show a => ToJSON (ShowIt a) where
 
 -- |We use this monad for the handlers, which gives them access to configuration data
 --  of type 'conf'.
-type AppM conf = Reader.ReaderT conf SS.Handler
+type AppM conf = ReaderT conf SS.Handler
 
 
 data UserError
@@ -107,7 +116,7 @@ instance Show InternalError where
 
 -- |Transform an 'AppM conf' into a 'Servant.Handler'
 readerToEither :: conf -> AppM conf SS.:~> SS.Handler
-readerToEither cfg = SS.Nat $ \x -> Reader.runReaderT x cfg
+readerToEither cfg = SS.Nat $ \x -> runReaderT x cfg
 
 envRead :: Read a => String -> IO (Maybe a)
 envRead envVar = maybe Nothing readMaybe <$> lookupEnv envVar

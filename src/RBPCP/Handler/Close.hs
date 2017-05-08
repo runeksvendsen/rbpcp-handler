@@ -21,62 +21,74 @@ import qualified BitcoinSigner.Lib.Signing    as Sign
 
 
 runClose :: DB.ChanDBTx m dbM dbH
-         => EitherT (HandlerErr PC.PayChanError) m (RBPCP.PaymentResult,HT.Tx)
+         => ReaderT (HandlerConf dbH) (EitherT (HandlerErr PC.PayChanError) m) RBPCP.PaymentResult
          -> HandlerM dbH RBPCP.PaymentResult
-runClose closeET = do
-    (res,tx) <- runAtomic closeET
-    -- Publish tx
-    iface <- wallIface
-    _ <- liftIO $ Wall.importTx iface tx
-    -- TODO: Also push using blockchain-restful-address-index?
-    return res
+runClose closeRET = do
+    conf <- getAppConf
+    runAtomic $ runReaderT closeRET conf
 
 closeE :: ( DB.ChanDBTx m dbM dbH
-          , MonadIO m
+          -- , MonadIO m
           ) =>
          RBPCP.BtcTxId
       -> Word32
       -> Maybe HC.Hash256
       -> RBPCP.Payment
-      -> EitherT (HandlerErr PC.PayChanError) m (RBPCP.PaymentResult,HT.Tx)
-closeE _        _        Nothing       _                        = left $ UserError ResourceNotFound
+      -> ReaderT (HandlerConf dbH) (EitherT (HandlerErr PC.PayChanError) m) RBPCP.PaymentResult
+closeE _        _        Nothing       _                        = lift $ generalErr $ UserError ResourceNotFound
 closeE fundTxId fundIdx (Just secret) (RBPCP.Payment payData _) = do
-    -- maybeRedirect (fundTxId, fundIdx, secret) payData
+    lift $ maybeRedirect (fundTxId, fundIdx, secret) payData
 
-    let throwNotFound = maybe (left $ UserError ResourceNotFound) return
-    chanState <- throwNotFound =<< lift (DB.getPayChan $ PC.fromHash secret)
-    -- Tx fee equals value of closing payment
-    closedServerChan <- abortOnErr =<< liftIO (PC.acceptClosingPayment payData chanState)
+    chanState <- maybe (lift $ generalErr $ UserError ResourceNotFound) return
+                        =<< lift (lift $ DB.getPayChan $ PC.fromHash secret)
+    closedServerChan <- lift . abortOnErr =<< liftIO (PC.acceptClosingPayment payData chanState)
 
     -- Ask bitcoin-signer to sign settlement tx
-    tx <- runBtcSignSC $ settleClosed closedServerChan
+    tx <- lift . hoistEither . fmapL InternalErr =<< internalReq confBitcoinSigner (settleClosed closedServerChan)
+
+    -- Publish tx
+    iface <- wallIface
+    -- TODO: mapConcurrently
+    _ <- liftIO $ Wall.importTx iface tx
+    lift . hoistEither . fmapL InternalErr =<< internalReq confProofServer (publishTx tx)
+    -- TODO
 
     -- TODO: closedServerChan ready for next payment/settle tx?
-    lift $ DB.updatePayChan (PC.getClosedState closedServerChan)
+    lift $ lift $ DB.updatePayChan (PC.getClosedState closedServerChan)
 
-    return ( RBPCP.PaymentResult
+    return RBPCP.PaymentResult
              { paymentResult_channel_status     = RBPCP.ChannelClosed
              , paymentResult_channel_valueLeft  = 0
              , paymentResult_value_received     = 0
              , paymentResult_settlement_txid    = Just . RBPCP.BtcTxId $ HT.txHash tx
              , paymentResult_application_data   = ""
              }
-           , tx
-           )
+
 
 settleClosed :: PC.ClosedServerChanX -> SC.ClientM HT.Tx
 settleClosed :<|> _ :<|> _ = SC.client api
     where api :: Proxy Sign.BTCSign
           api  = Proxy
 
--- Util
-runBtcSignSC :: MonadIO m => SC.ClientM a -> EitherT (HandlerErr e) m a
-runBtcSignSC = runClientM confBitcoinSigner
 
-runClientM :: MonadIO m => SC.BaseUrl -> SC.ClientM a -> EitherT (HandlerErr e) m a
-runClientM url req = do
-    man <- liftIO newTlsManager
-    resE <- liftIO $ SC.runClientM req (clientEnv man)  -- TODO: error handling/Control.Retry
-    hoistEither $ fmapL (InternalErr . RequestError url) resE
-  where
-    clientEnv m = SC.ClientEnv m url
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

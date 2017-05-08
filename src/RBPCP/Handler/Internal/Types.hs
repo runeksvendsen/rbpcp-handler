@@ -1,4 +1,8 @@
-module RBPCP.Handler.Internal.Types where
+module RBPCP.Handler.Internal.Types
+( module RBPCP.Handler.Internal.Types
+, module Conf
+)
+where
 
 import MyPrelude
 import Conf
@@ -15,15 +19,48 @@ import qualified Servant.Client               as SC
 import qualified Servant.Server               as SS
 import qualified PaymentChannel               as PC
 
+import qualified Control.Monad.Reader   as Reader
 
 
 type HandlerM dbConf = AppM (HandlerConf dbConf)
 
+
+class HasAppConf m dbH where
+    getAppConf :: m (HandlerConf dbH)
+
+instance HasAppConf (HandlerM dbH) dbH where
+    getAppConf = Reader.ask
+
+
 class HasSpvWallet m where
     wallIface :: m Wall.Interface
 
-instance HasSpvWallet (HandlerM dbH) where
+instance Monad m => HasSpvWallet (ReaderT (HandlerConf dbH) m) where
     wallIface = Reader.asks hcSpvWallet
+
+
+class DB.ChanDB dbM dbH => HasDb m dbM dbH where
+    liftDB :: dbM a -> m a
+
+instance DB.ChanDB dbM dbH => HasDb (ReaderT (HandlerConf dbH) dbM) dbM dbH where
+    liftDB = lift
+
+instance DB.ChanDB dbM dbH => HasDb (ReaderT (HandlerConf dbH) (EitherT (HandlerErr e) dbM)) dbM dbH where
+    liftDB = lift . lift
+
+
+class DB.ChanDBTx dbTxM dbM dbH => HasDbTx m dbTxM dbM dbH where
+    liftDbTx :: dbTxM a -> m a
+
+instance (DB.ChanDBTx dbTxM dbM dbH, Monad dbTxM)
+            => HasDbTx (ReaderT (HandlerConf dbH) dbTxM) dbTxM dbM dbH where
+    liftDbTx = lift
+
+instance (DB.ChanDBTx dbTxM dbM dbH, Monad dbTxM)
+            => HasDbTx (ReaderT (HandlerConf dbH) (EitherT (HandlerErr e) dbTxM)) dbTxM dbM dbH where
+    liftDbTx = lift . lift
+
+
 
 type BlockNumber = Word32
 

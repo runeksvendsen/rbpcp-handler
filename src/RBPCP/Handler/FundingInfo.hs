@@ -8,8 +8,8 @@ import qualified PaymentChannel               as PC
 import qualified ChanDB                       as DB
 
 
-fundingInfo :: -- DB.ChanDB m dbH =>
-    RBPCP.Client PC.PubKey -> Word32 -> HandlerM dbH RBPCP.FundingInfo
+fundingInfo ::
+    RBPCP.Client PC.PubKey -> Word32 -> HandlerM a RBPCP.FundingInfo
 fundingInfo (RBPCP.Client clientPk) lockTime = do
     serverPk <- getCurrentPubKey
     lockTimeDate <- either (throwUserError . PC.mkChanErr) return $ PC.parseLockTime lockTime
