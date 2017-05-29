@@ -18,8 +18,8 @@ import qualified Control.Monad.Reader         as Reader
 import qualified Servant.Client               as SC
 import qualified Servant.Server               as SS
 import qualified PaymentChannel               as PC
+import qualified Data.Text                    as T
 
-import qualified Control.Monad.Reader   as Reader
 
 
 type HandlerM dbConf = AppM (HandlerConf dbConf)
@@ -90,7 +90,6 @@ instance IsHandlerException DB.ChanDBException where
         if DB.is404 e
             then SS.err404
             else mkServantErr SS.err500 (OtherInternalErr "")
-
 
 instance IsHandlerException PC.PayChanError where
     mkHandlerErr = mkServantErr SS.err400

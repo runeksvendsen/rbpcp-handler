@@ -1,18 +1,13 @@
 module RBPCP.Handler.Open where
 
 import RBPCP.Handler.Internal.Util
-import Conf
 import qualified Settings
-import qualified Servant.Client               as SC
 import qualified Servant.Server               as SS
 import qualified RBPCP.Types                  as RBPCP
-import qualified RBPCP.Api                    as API
 import qualified PaymentChannel               as PC
 import qualified ChanDB                       as DB
 import qualified Bitcoin.SPV.Wallet           as Wall
-import qualified Bitcoin.SPV.Wallet.Extra     as Wall
 import qualified Network.Haskoin.Crypto       as HC
-import qualified Network.Haskoin.Transaction  as HT
 
 
 runOpen :: DB.ChanDB m dbH
@@ -25,10 +20,7 @@ runOpen openET = do
     -- handleErrorE =<< handleErrorE =<< liftIO runner
 
 openE ::
-     ( DB.ChanDB m conf
-     -- , HasDb
-     -- , MonadIO m
-     )
+     ( DB.ChanDB m conf )
     => RBPCP.BtcTxId
     -> Word32
     -> Maybe HC.Hash256
@@ -51,10 +43,8 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData appData) = do
 
     --    2. Verify payment/Create state object
     let tx = Wall.proof_tx_data $ Wall.ciFundProof cInfo
-    (chanState, val) <- lift . abortOnErr =<< fmapL OpeningPaymentError <$>
-            liftIO (PC.channelFromInitialPayment tx paymentData)
-    when (val < Settings.confOpenPrice) $
-        lift $ abortWithErr $ InitialPaymentShort val Settings.confOpenPrice
+    chanState <- lift . abortOnErr =<< fmapL OpeningPaymentError <$>
+            liftIO (PC.channelFromInitialPayment Settings.serverSettings tx paymentData)
     let stateSecret = PC.toHash $ PC.getSecret chanState
     when (secret /= stateSecret) $
         lift $ abortWithErr $ BadSharedSecret stateSecret
@@ -72,8 +62,8 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData appData) = do
 
     return RBPCP.PaymentResult
            { paymentResult_channel_status     = RBPCP.ChannelOpen
-           , paymentResult_channel_valueLeft  = fromIntegral $ PC.availableChannelVal chanState
-           , paymentResult_value_received     = fromIntegral val
+           , paymentResult_channel_valueLeft  = fromIntegral $ PC.channelValueLeft chanState
+           , paymentResult_value_received     = fromIntegral $ PC.serverConfOpenPrice Settings.serverSettings
            , paymentResult_settlement_txid    = Nothing
            , paymentResult_application_data   = ""
            }
@@ -87,12 +77,8 @@ data OpenErr
   | NoSuchServerPubKey HC.PubKeyC
   | OpeningPaymentError PC.PayChanError
 
-
-
-
 instance IsHandlerException OpenErr where
     mkHandlerErr = mkServantErr SS.err400
-
 
 instance Show OpenErr where
     show (TxNotFound tid) = unwords

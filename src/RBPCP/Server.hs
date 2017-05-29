@@ -2,7 +2,9 @@
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 module RBPCP.Server
-( server )
+( createServer
+, module X
+)
 where
 
 import RBPCP.Handler.FundingInfo  as X
@@ -19,23 +21,22 @@ import qualified ChanDB                       as DB
 import qualified RBPCP.Api                    as Api
 
 
-
-server :: forall txM dbM dbH.
-    ( DB.ChanDB dbM dbH
-    , DB.ChanDBTx txM dbM dbH
-    )
+-- | Create server, specifying database type and function which is called for every payment received
+createServer :: forall txM dbM dbH.
+    ( DB.ChanDBTx txM dbM dbH )
     => Proxy (txM ())
+    -> PaymentCallback
     -> ServerT Api.RBPCP (HandlerM dbH)
-server _ =
+createServer _ payCb =
     fundingInfo :<|> open :<|> pay :<|> close
   where
+    open  tid vout s p = runOpen
+        (openE tid vout s p ::
+            ReaderT (HandlerConf dbH) (EitherT (HandlerErr OpenErr) dbM) RBPCP.PaymentResult)
+    pay   tid vout s p = runPay payCb
+        (payE tid vout s p ::
+            ReaderT PaymentCallback (EitherT (HandlerErr PaymentError) txM) RBPCP.PaymentResult)
     close tid vout s p = runClose
         (closeE tid vout s p ::
             ReaderT (HandlerConf dbH) (EitherT (HandlerErr PayChanError) txM) RBPCP.PaymentResult)
-    pay   tid vout s p = runAtomic
-        (payE tid vout s p  ::
-            EitherT (HandlerErr PayChanError) txM RBPCP.PaymentResult)
-    open  tid vout s p = runOpen
-        (openE tid vout s p :: ReaderT (HandlerConf dbH) (EitherT (HandlerErr OpenErr) dbM) RBPCP.PaymentResult)
-
 

@@ -17,8 +17,8 @@ packages:
 - '/Users/rune/IdeaProjects/bitcoin-payment-channel'
 ## Extra deps
 - location:
-    git: https://github.com/runeksvendsen/haskoin.git
-    commit: 75a7dd3c2fb22ac836138d8b0dfa1763feab53b3
+    git: https://github.com/haskoin/haskoin.git
+    commit: e11ff9b8375ea07bf72420401898f9d607476bb2
   extra-dep: true
   subdirs:
     - haskoin-core

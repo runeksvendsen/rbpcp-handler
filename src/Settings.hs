@@ -7,6 +7,14 @@ import qualified Servant.Client               as SC
 import qualified PaymentChannel               as PC
 
 
+serverSettings :: PC.ServerSettings
+serverSettings = PC.ServerSettings
+    { PC.serverConfDustLimit     = 6000
+    , PC.serverConfSettlePeriod  = PC.MkHour 12
+    , PC.serverConfMinDuration   = PC.MkHour 48
+    , PC.serverConfOpenPrice     = 30000
+    }
+
 -- | The server's channel public keys are derived from this key.
 --   Every time a client opens a channel, the next key is handed out to new clients.
 confServerExtPub :: External ChildPub
@@ -15,12 +23,6 @@ confServerExtPub = fromXPub $ fromMaybe (error "Bad server XPubKey") $ HC.xPubIm
 
 confMinBtcConf :: Word
 confMinBtcConf = 6
-
-confOpenPrice :: PC.BtcAmount
-confOpenPrice = 30000
-
-confMinDurationHours :: Word
-confMinDurationHours = 48
 
 confProofServer :: SC.BaseUrl
 confProofServer = SC.BaseUrl SC.Https "blockchain.runeks.me" 443 ""

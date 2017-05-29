@@ -8,42 +8,41 @@ where
 
 import RBPCP.Handler.Internal.Types
 import MyPrelude
+import Network.Bitcoin.AddrIndex.API            (PublishTx, PushTxReq(..))
 
-import qualified Conf
 import qualified ChanDB                       as DB
 import qualified PaymentChannel               as PC
 import qualified RBPCP.Types                  as RBPCP
-import qualified RBPCP.Api                    as API
-import qualified Web.HttpApiData              as Web
-import qualified Servant.Utils.Links          as SL
-import qualified Bitcoin.SPV.Wallet           as Wall
-import qualified Data.ByteString.Base16       as B16
 import qualified Control.Monad.Reader         as Reader
 import qualified Network.Haskoin.Crypto       as HC
 import qualified Control.Monad.Logger         as Log
 import qualified Servant.Server               as SS
 import qualified Servant.Client               as SC
-import           Network.Bitcoin.AddrIndex.API  (PublishTx, PushTxReq(..))
 
 
-runAtomic :: DB.ChanDBTx m dbM dbH
-          => EitherT (HandlerErr PC.PayChanError) m a
-          -> HandlerM dbH a
+
+runAtomic ::
+    ( DB.ChanDBTx m dbM dbH
+    , IsHandlerException e
+    )
+    => EitherT (HandlerErr e) m a
+    -> HandlerM dbH a
 runAtomic atomicET = do
     cfg <- getDbConf
     let atomic = DB.atomically DB.PayChanDB cfg $ runEitherT atomicET
     handleErrorE =<< handleErrorE =<< liftIO atomic
 
 runNonAtomic ::
-    ( IsHandlerException e
-    , DB.ChanDB m dbH
+    ( DB.ChanDB m dbH
+    , IsHandlerException e
     )
     => EitherT (HandlerErr e) m a
     -> HandlerM dbH a
-runNonAtomic atomicET = do
+runNonAtomic nonAtomicET = do
     cfg <- getDbConf
-    let nonAtomic = DB.runDB cfg $ runEitherT atomicET
+    let nonAtomic = DB.runDB cfg $ runEitherT nonAtomicET
     handleErrorE =<< handleErrorE =<< liftIO nonAtomic
+
 
 maybeRedirect :: Monad m
     => (RBPCP.BtcTxId, Word32, HC.Hash256)

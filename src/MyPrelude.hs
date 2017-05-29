@@ -6,12 +6,10 @@ module MyPrelude
 , module X
 , fromString
 , Status(..)
-, HTTP.Manager, HTTP.newManager, tlsManagerSettings, newTlsManager
+, HTTP.Manager, HTTP.newManager, tlsManagerSettings
 , HT.TxHash
 , Log.runStdoutLoggingT
-
 , PC.PayChanError
-, BitcoinTx
 )
 where
 
@@ -61,12 +59,10 @@ import qualified RBPCP.Types                  as RBPCP
 import qualified RBPCP.Api                    as API
 import qualified Web.HttpApiData              as Web
 import qualified Servant.Utils.Links          as SL
-import qualified Bitcoin.SPV.Wallet           as Wall
 import qualified Data.ByteString.Base16       as B16
 import Control.Monad.Reader as X
 import Control.Monad.Trans.Either as X
 import Control.Monad.Base         as X
--- import qualified Conf
 
 
 type BitcoinTx = HT.Tx
@@ -87,7 +83,7 @@ internalReq url req =
 
 
 -- Handler error response
-newtype HandlerError a = HandlerError
+newtype HandlerErrorMsg a = HandlerErrorMsg
     { error_msg :: ShowIt a
     } deriving (Eq, ToJSON)
 
@@ -121,16 +117,14 @@ readerToEither cfg = SS.Nat $ \x -> runReaderT x cfg
 envRead :: Read a => String -> IO (Maybe a)
 envRead envVar = maybe Nothing readMaybe <$> lookupEnv envVar
 
-
 mkServantErr :: Show a => SS.ServantErr -> a -> SS.ServantErr
-mkServantErr se pce = se { SS.errBody = cs . encode . HandlerError $ ShowIt pce }
+mkServantErr se pce = se { SS.errBody = cs . encode . HandlerErrorMsg $ ShowIt pce }
 
 throwUserError :: (Show e, MonadError SS.ServantErr m) => e -> m a
 throwUserError = throwError . mkServantErr SS.err400
 
 throwServerError :: MonadError SS.ServantErr m => InternalError -> m a 
 throwServerError = throwError . mkServantErr SS.err500
--- Handler error response
 
 mkUrl :: RBPCP.BtcTxId -> Word32 -> HC.Hash256 -> T.Text
 mkUrl h i s = ("/" <>) . cs . show $ SL.safeLink api endPoint h i (Just s)
@@ -142,7 +136,6 @@ mkUrl h i s = ("/" <>) . cs . show $ SL.safeLink api endPoint h i (Just s)
 
 newTlsManager :: IO HTTP.Manager
 newTlsManager = HTTP.newManager tlsManagerSettings
-
 
 
 instance Web.FromHttpApiData HC.PubKeyC where

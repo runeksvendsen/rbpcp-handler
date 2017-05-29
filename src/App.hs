@@ -1,3 +1,4 @@
+-- {-# LANGUAGE ScopedTypeVariables   #-}
 module App where
 
 import MyPrelude
@@ -12,22 +13,26 @@ import qualified Network.Wai.Handler.Warp     as Warp
 import qualified System.ZMQ4                  as ZMQ
 
 
-app :: Conf.HandlerConf ChanDB.ConfImpl
-    -> Wai.Application
-app conf =
-    serve (api :: Proxy Api.RBPCP) $ serverEmbedConf (Server.server dbTxImpl) conf
+-- |
+createApp :: ChanDB.ChanDBTx txM dbM dbH
+          => Proxy (txM ())           -- ^ Database implementation
+          -> Conf.HandlerConf dbH
+          -> Server.PaymentCallback
+          -> Wai.Application
+createApp dbImpl conf cb =
+    serve (Proxy :: Proxy Api.RBPCP) $ serverEmbedConf (Server.createServer dbImpl cb) conf
   where
     serverEmbedConf srv cfg = enter (readerToEither cfg) srv
-    api = Proxy
-    dbTxImpl :: Proxy (ChanDB.TxImpl ())
-    dbTxImpl = Proxy
 
-startApp :: ZMQ.Context -> IO ()
-startApp ctx = do
+testApp :: ZMQ.Context -> IO ()
+testApp ctx = do
     let port = 8080
+        datastoreDb :: Proxy (ChanDB.TxImpl ())
+        datastoreDb = Proxy
+        noOpCallback = Server.PaymentCallback $ \_ _ _ -> return (Server.CallbackResult $ Right "")
     conf <- Init.appConf ctx
     putStrLn $ "Starting server on port " ++ show port
-    Warp.run port $ app conf
+    Warp.run port $ createApp datastoreDb conf noOpCallback
 
-runApp :: IO ()
-runApp = ZMQ.withContext startApp
+runTestApp :: IO ()
+runTestApp = ZMQ.withContext testApp

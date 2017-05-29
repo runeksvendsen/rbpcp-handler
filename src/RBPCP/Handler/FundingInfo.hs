@@ -6,32 +6,33 @@ import qualified Conf
 import qualified RBPCP.Types                  as RBPCP
 import qualified PaymentChannel               as PC
 import qualified ChanDB                       as DB
+import qualified Servant.Server               as SS
 
 
 fundingInfo ::
     RBPCP.Client PC.PubKey -> Word32 -> HandlerM a RBPCP.FundingInfo
 fundingInfo (RBPCP.Client clientPk) lockTime = do
-    serverPk <- getCurrentPubKey
-    lockTimeDate <- either (throwUserError . PC.mkChanErr) return $ PC.parseLockTime lockTime
+    let handleErr :: (MonadError SS.ServantErr m, PC.IsPayChanError e) => Either e a -> m a
+        handleErr = either (throwUserError . PC.mkChanErr) return
+    lockTimeDate <- handleErr $ PC.parseLockTime lockTime
+    serverPk     <- getCurrentPubKey
     let chanParams = PC.MkChanParams (PC.MkSendPubKey clientPk) serverPk lockTimeDate
-    return $ mkFundingInfo chanParams  
+    handleErr =<< PC.hasMinimumDuration serverSettings lockTimeDate
+    return $ mkFundingInfo serverSettings chanParams
 
 getCurrentPubKey :: HandlerM dbH PC.RecvPubKey
 getCurrentPubKey = do
   getter <- asks Conf.hcCurrPubKey
   handleErrorE =<< fmap DB.kaiPubKey <$> liftIO getter
 
-
-mkFundingInfo :: PC.ChanParams -> RBPCP.FundingInfo
-mkFundingInfo chanParams =
+mkFundingInfo :: PC.ServerSettings -> PC.ChanParams -> RBPCP.FundingInfo
+mkFundingInfo PC.ServerSettings{..} chanParams =
     RBPCP.FundingInfo
          { RBPCP.fundingInfoServerPubkey               = RBPCP.Server . PC.getPubKey $ PC.getRecvPubKey chanParams
-         , RBPCP.fundingInfoDustLimit                  = fromIntegral PC.getDustLimit
+         , RBPCP.fundingInfoDustLimit                  = fromIntegral serverConfDustLimit
          , RBPCP.fundingInfoFundingAddressCopy         = PC.getFundingAddress chanParams
-         , RBPCP.fundingInfoOpenPrice                  = fromIntegral confOpenPrice
+         , RBPCP.fundingInfoOpenPrice                  = fromIntegral serverConfOpenPrice
          , RBPCP.fundingInfoFunding_tx_min_conf        = confMinBtcConf
-         , RBPCP.fundingInfoSettlement_period_hours    = fromIntegral $ unTagged PC.getSettlePeriod
-         , RBPCP.fundingInfoMin_duration_hours         = confMinDurationHours
+         , RBPCP.fundingInfoSettlement_period_hours    = fromIntegral serverConfSettlePeriod
+         , RBPCP.fundingInfoMin_duration_hours         = fromIntegral serverConfMinDuration
          }
-
-
