@@ -1,20 +1,11 @@
 module RBPCP.Handler.Pay where
 
 import RBPCP.Handler.Internal.Util
-import Settings
-import Conf
-import Servant.Server
-import Control.Monad.Time
-import Control.Monad.Catch
 
-import qualified Servant.Client               as SC
 import qualified Servant.Server               as SS
 import qualified RBPCP.Types                  as RBPCP
-import qualified RBPCP.Api                    as API
 import qualified PaymentChannel               as PC
 import qualified ChanDB                       as DB
-import qualified Bitcoin.SPV.Wallet           as Wall
-import qualified Bitcoin.SPV.Wallet.Extra     as Wall
 import qualified Network.Haskoin.Crypto       as HC
 import qualified Data.Text                    as T
 

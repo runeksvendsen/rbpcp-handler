@@ -21,7 +21,7 @@ import qualified ChanDB                       as DB
 import qualified RBPCP.Api                    as Api
 
 
--- | Create server, specifying database type and function which is called for every payment received
+-- | Create server, specifying database implementation and a function that's called for every payment received
 createServer :: forall txM dbM dbH.
     ( DB.ChanDBTx txM dbM dbH )
     => Proxy (txM ())

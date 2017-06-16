@@ -1,11 +1,11 @@
 module RBPCP.Handler.Internal.Types
 ( module RBPCP.Handler.Internal.Types
-, module Conf
+, module RBPCP.Internal.Conf
 )
 where
 
 import MyPrelude
-import Conf
+import RBPCP.Internal.Conf
 import qualified ChanDB         as DB
 
 import qualified RBPCP.Types                  as RBPCP
@@ -32,11 +32,11 @@ instance HasAppConf (HandlerM dbH) dbH where
     getAppConf = Reader.ask
 
 
-class HasSpvWallet m where
-    wallIface :: m Wall.Interface
-
-instance Monad m => HasSpvWallet (ReaderT (HandlerConf dbH) m) where
-    wallIface = Reader.asks hcSpvWallet
+--class HasSpvWallet m where
+--    wallIface :: m Wall.Interface
+--
+--instance Monad m => HasSpvWallet (ReaderT (HandlerConf dbH) m) where
+--    wallIface = Reader.asks hcSpvWallet
 
 
 class DB.ChanDB dbM dbH => HasDb m dbM dbH where

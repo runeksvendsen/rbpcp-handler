@@ -1,6 +1,7 @@
 module Main where
 
-import qualified App
+import qualified RBPCP.App as App
 
 main :: IO ()
-main = App.runTestApp
+main = App.runTestApp testPort
+    where testPort = 8080

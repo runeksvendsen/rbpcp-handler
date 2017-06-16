@@ -1,10 +1,6 @@
 #resolver: lts-7.18
 resolver: nightly-2016-12-05
 
-# Needed for proto-lens stuff
-explicit-setup-deps:
-  promissory-note-types: true
-
 packages:
 ## App
 - '.'

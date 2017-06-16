@@ -1,11 +1,11 @@
 -- {-# LANGUAGE ScopedTypeVariables   #-}
-module App where
+module RBPCP.App where
 
 import MyPrelude
 import Servant
-import qualified Conf
-import qualified Init
-import qualified ChanDB
+import qualified RBPCP.Internal.Init          as Init
+import qualified                                 ChanDB
+import qualified RBPCP.Internal.Conf          as Conf
 import qualified RBPCP.Server                 as Server
 import qualified Network.Wai                  as Wai
 import qualified RBPCP.Api                    as Api
@@ -24,15 +24,14 @@ createApp dbImpl conf cb =
   where
     serverEmbedConf srv cfg = enter (readerToEither cfg) srv
 
-testApp :: ZMQ.Context -> IO ()
-testApp ctx = do
-    let port = 8080
-        datastoreDb :: Proxy (ChanDB.TxImpl ())
+testApp :: Word -> ZMQ.Context -> IO ()
+testApp port ctx = do
+    let datastoreDb :: Proxy (ChanDB.TxImpl ())
         datastoreDb = Proxy
         noOpCallback = Server.PaymentCallback $ \_ _ _ -> return (Server.CallbackResult $ Right "")
-    conf <- Init.appConf ctx
+    conf <- Init.appConf datastoreDb ctx
     putStrLn $ "Starting server on port " ++ show port
-    Warp.run port $ createApp datastoreDb conf noOpCallback
+    Warp.run (fromIntegral port) $ createApp datastoreDb conf noOpCallback
 
-runTestApp :: IO ()
-runTestApp = ZMQ.withContext testApp
+runTestApp :: Word -> IO ()
+runTestApp port = ZMQ.withContext (testApp port)

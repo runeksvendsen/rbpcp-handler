@@ -1,6 +1,8 @@
 module RBPCP.Handler.Open where
 
 import RBPCP.Handler.Internal.Util
+import RBPCP.Handler.Internal.Funding
+
 import qualified Settings
 import qualified Servant.Server               as SS
 import qualified RBPCP.Types                  as RBPCP
@@ -16,8 +18,6 @@ runOpen :: DB.ChanDB m dbH
 runOpen openET = do
     cfg <- getAppConf
     runNonAtomic $ runReaderT openET cfg
-    -- let runner = DB.runDB cfg $ runEitherT eitherTM
-    -- handleErrorE =<< handleErrorE =<< liftIO runner
 
 openE ::
      ( DB.ChanDB m conf )
@@ -27,36 +27,46 @@ openE ::
     -> RBPCP.Payment
     -> ReaderT (HandlerConf conf) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
 openE _        _        Nothing       _                                  = lift $ left $ UserError ResourceNotFound
-openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData appData) = do
+openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
     lift $ maybeRedirect (fundTxId, fundIdx, secret) paymentData
 
-    --    1. Get confirmation proof
-    iface <- wallIface
+    --    1. Fetch alleged funding Bitcoin transaction
     let txid = RBPCP.btcTxId fundTxId
-    cInfo <- maybe (lift $ abortWithErr $ TxNotFound fundTxId) return
+    fundProof <- maybe (lift $ abortWithErr $ TxNotFound fundTxId) return
               =<< lift . hoistEither . fmapL InternalErr
-              =<< internalReq Settings.confProofServer (Wall.getConfProof iface txid)
-
-    let confs = Wall.ciConfCount cInfo
-    when (fromIntegral confs < Settings.confMinBtcConf) $
-        lift $ abortWithErr $ InsufficientConfCount (fromIntegral confs) Settings.confMinBtcConf
+              =<< internalReq Settings.confProofServer (fundingProofM txid)
 
     --    2. Verify payment/Create state object
-    let tx = Wall.proof_tx_data $ Wall.ciFundProof cInfo
+    let tx = Wall.proof_tx_data fundProof
     chanState <- lift . abortOnErr =<< fmapL OpeningPaymentError <$>
             liftIO (PC.channelFromInitialPayment Settings.serverSettings tx paymentData)
     let stateSecret = PC.toHash $ PC.getSecret chanState
     when (secret /= stateSecret) $
         lift $ abortWithErr $ BadSharedSecret stateSecret
 
-    --    3. PubKey-DB: Lookup
+    --    3. Check if funding output is spent, plus confirmation count
+    let fundAddr = PC.fundingAddress chanState
+        -- Important: 'maybeRedirect' checks if 'fundTxId'/'fundIdx' and hash/idx in 'paymentData' match
+        relevantAddrInfo afi = asiFundingTxId afi == txid && asiFundingVout afi == fundIdx
+    addrFundInfoL <- lift . hoistEither . fmapL InternalErr
+                  =<< internalReq Settings.confProofServer (unspentOuts fundAddr)
+    case filter relevantAddrInfo addrFundInfoL of
+        []    -> lift $ abortWithErr SpentFundingOutput
+        [afi] -> do
+            let confs = asiConfs afi
+            when (fromIntegral confs < Settings.confMinBtcConf) $
+                lift $ abortWithErr $ InsufficientConfCount (fromIntegral confs) Settings.confMinBtcConf
+        x@(_:_:_) -> error $ "BUG: Multiple outputs with same txid+vout: " ++ show x
+
+
+    --    4. PubKey-DB: Lookup
     let recvPubKey = PC.getRecvPubKey chanState
     pkIndexM <- lift $ lift $ DB.pubKeyLookup Settings.confServerExtPub recvPubKey
     chanStateX <- lift $ abortOnErr $ case pkIndexM of
         Nothing  -> Left  $ NoSuchServerPubKey $ PC.getPubKey recvPubKey
         Just pki -> Right $ PC.setMetadata chanState (DB.kaiIndex pki)
 
-    --    4. ChanDB: mark pubKey as used & insert PayChanState
+    --    5. ChanDB: mark pubKey as used & insert PayChanState
     _ <- lift $ lift $ DB.pubKeyMarkUsed Settings.confServerExtPub recvPubKey
     lift $ lift $ DB.create chanStateX
 
@@ -71,6 +81,7 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData appData) = do
 
 data OpenErr
   = TxNotFound RBPCP.BtcTxId
+  | SpentFundingOutput
   | InsufficientConfCount Word Word
   | InitialPaymentShort PC.BtcAmount PC.BtcAmount
   | BadSharedSecret HC.Hash256
@@ -86,6 +97,7 @@ instance Show OpenErr where
         , show tid -- TODO <-
         , "not found in blockchain"
         ]
+    show SpentFundingOutput = "channel funding output already spent"
     show (InsufficientConfCount have need) = unwords
         [ "insufficient confirmation count. have"
         , show have

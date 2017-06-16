@@ -2,7 +2,7 @@ module RBPCP.Handler.FundingInfo where
 
 import RBPCP.Handler.Internal.Util
 import Settings
-import qualified Conf
+import qualified RBPCP.Internal.Conf          as Conf
 import qualified RBPCP.Types                  as RBPCP
 import qualified PaymentChannel               as PC
 import qualified ChanDB                       as DB
@@ -16,7 +16,7 @@ fundingInfo (RBPCP.Client clientPk) lockTime = do
         handleErr = either (throwUserError . PC.mkChanErr) return
     lockTimeDate <- handleErr $ PC.parseLockTime lockTime
     serverPk     <- getCurrentPubKey
-    let chanParams = PC.MkChanParams (PC.MkSendPubKey clientPk) serverPk lockTimeDate
+    let chanParams = PC.ChanParams (PC.MkSendPubKey clientPk) serverPk lockTimeDate
     handleErr =<< PC.hasMinimumDuration serverSettings lockTimeDate
     return $ mkFundingInfo serverSettings chanParams
 

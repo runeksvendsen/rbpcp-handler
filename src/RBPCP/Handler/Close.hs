@@ -2,19 +2,13 @@ module RBPCP.Handler.Close where
 
 import RBPCP.Handler.Internal.Util
 import Settings
-import Servant.Server
-import Control.Monad.Time
-import Control.Monad.Catch
 import Servant.API
 
 import qualified Servant.Client               as SC
-import qualified Servant.Server               as SS
 import qualified RBPCP.Types                  as RBPCP
-import qualified RBPCP.Api                    as API
 import qualified PaymentChannel               as PC
 import qualified ChanDB                       as DB
 import qualified Bitcoin.SPV.Wallet           as Wall
-import qualified Bitcoin.SPV.Wallet.Extra     as Wall
 import qualified Network.Haskoin.Crypto       as HC
 import qualified Network.Haskoin.Transaction  as HT
 import qualified BitcoinSigner.Lib.Signing    as Sign
@@ -47,11 +41,7 @@ closeE fundTxId fundIdx (Just secret) (RBPCP.Payment payData _) = do
     tx <- lift . hoistEither . fmapL InternalErr =<< internalReq confBitcoinSigner (settleClosed closedServerChan)
 
     -- Publish tx
-    iface <- wallIface
-    -- TODO: mapConcurrently
-    _ <- liftIO $ Wall.importTx iface tx
     lift . hoistEither . fmapL InternalErr =<< internalReq confProofServer (publishTx tx)
-    -- TODO
 
     -- TODO: closedServerChan ready for next payment/settle tx?
     lift $ lift $ DB.updatePayChan (PC.getClosedState closedServerChan)

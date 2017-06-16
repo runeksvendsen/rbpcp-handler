@@ -16,7 +16,7 @@ serverSettings = PC.ServerSettings
     }
 
 -- | The server's channel public keys are derived from this key.
---   Every time a client opens a channel, the next key is handed out to new clients.
+--   Every time a client opens a channel, a new key is derived and handed out to new clients.
 confServerExtPub :: External ChildPub
 confServerExtPub = fromXPub $ fromMaybe (error "Bad server XPubKey") $ HC.xPubImport 
      "xpub6CWiJoiwxPQni3DFbrQNHWq8kwrL2J1HuBN7zm4xKPCZRmEshc7Dojz4zMah7E4o2GEEbD6HgfG7sQid186Fw9x9akMNKw2mu1PjqacTJB2"
@@ -30,5 +30,5 @@ confProofServer = SC.BaseUrl SC.Https "blockchain.runeks.me" 443 ""
 confBitcoinSigner :: SC.BaseUrl
 confBitcoinSigner = SC.BaseUrl SC.Http "localhost" 8081 ""
 
-spvWalletCacheDir :: Text
-spvWalletCacheDir = "/Users/rune/.btc-spv/"
+confSpvWalletCacheDir :: Text
+confSpvWalletCacheDir = "/Users/rune/.btc-spv/"

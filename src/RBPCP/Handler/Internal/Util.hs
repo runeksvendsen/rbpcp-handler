@@ -8,17 +8,16 @@ where
 
 import RBPCP.Handler.Internal.Types
 import MyPrelude
-import Network.Bitcoin.AddrIndex.API            (PublishTx, PushTxReq(..))
-
+import Network.Bitcoin.AddrIndex.API          (PublishTx, PushTxReq(..))
 import qualified ChanDB                       as DB
 import qualified PaymentChannel               as PC
 import qualified RBPCP.Types                  as RBPCP
 import qualified Control.Monad.Reader         as Reader
+import qualified Network.Haskoin.Transaction  as HT
 import qualified Network.Haskoin.Crypto       as HC
 import qualified Control.Monad.Logger         as Log
 import qualified Servant.Server               as SS
 import qualified Servant.Client               as SC
-
 
 
 runAtomic ::
@@ -64,23 +63,6 @@ generalErr = left
 
 liftDb :: (Monad m, Monad (t m), Reader.MonadTrans t) => m a -> (t (t m)) a
 liftDb = lift . lift
-
-{-
-class MayReturnError e m where
-    abortWithErr  :: e -> m a
-    abortOnErr    :: Either e a -> m a
-    generalErr    :: HandlerErr e -> m a
-
-instance Monad m => MayReturnError e (EitherT (HandlerErr e) m) where
-    abortOnErr = hoistEither . fmapL HandlerErr
-    abortWithErr = left . HandlerErr
-    generalErr = left
-
-instance Monad m => MayReturnError e (ReaderT a (EitherT (HandlerErr e) m)) where
-    abortOnErr = lift . abortOnErr
-    abortWithErr = lift . abortWithErr
-    generalErr = lift . generalErr
--}
 
 handleErrorE ::
     ( MonadError SS.ServantErr m
