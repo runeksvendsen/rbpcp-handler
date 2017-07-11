@@ -14,10 +14,17 @@ data PaymentError
   = PaymentError PC.PayChanError
   | ApplicationError T.Text
 
+instance Show PaymentError where
+    show (PaymentError e) =
+        "payment error: " ++ show e
+    show (ApplicationError t) =
+        "application error: " ++ show t
+
 instance IsHandlerException PaymentError where
-    mkHandlerErr (PaymentError pce) = mkServantErr SS.err400 pce
-    -- TODO: separate payment error from application error
-    mkHandlerErr (ApplicationError e) = mkServantErr SS.err400 e
+    mkHandlerErr = mkServantErr SS.err400
+
+instance HasErrorResponse PaymentError where
+    errRes = cs . show
 
 newtype PaymentCallback = PaymentCallback
     (  T.Text               -- ^ Application data
@@ -41,7 +48,7 @@ payE :: ( DB.ChanDBTx m dbM dbH
         ) =>
         RBPCP.BtcTxId
      -> Word32
-     -> Maybe HC.Hash256
+     -> Maybe RBPCP.SharedSecret
      -> RBPCP.Payment
      -> ReaderT PaymentCallback (EitherT (HandlerErr PaymentError) m) RBPCP.PaymentResult
 payE _        _        Nothing       _                              = lift $ left $ UserError ResourceNotFound
@@ -52,7 +59,7 @@ payE fundTxId fundIdx (Just secret) (RBPCP.Payment payData appData) = do
     (newState, payVal) <- lift . abortOnErr . fmapL PaymentError
                             =<< liftIO . PC.acceptPayment payData
                             =<< throwNotFound
-                            =<< lift (lift $ DB.getPayChan $ PC.fromHash secret)
+                            =<< lift (lift $ DB.getPayChan secret)
 
     PaymentCallback callbackFunc <- ask
     CallbackResult  callbackResE <- liftIO $ callbackFunc appData newState payVal
@@ -64,14 +71,14 @@ payE fundTxId fundIdx (Just secret) (RBPCP.Payment payData appData) = do
     lift $ lift $ DB.updatePayChan newState
 
     return RBPCP.PaymentResult
-           { paymentResult_channel_status     =
+           { paymentResultChannelStatus     =
                   if PC.channelValueLeft newState /= 0
                       then RBPCP.ChannelOpen
                       else RBPCP.ChannelClosed
-           , paymentResult_channel_valueLeft  = fromIntegral $ PC.channelValueLeft newState
-           , paymentResult_value_received     = fromIntegral payVal
-           , paymentResult_settlement_txid    = Nothing
-           , paymentResult_application_data   = appResData
+           , paymentResultChannelValueLeft  = fromIntegral $ PC.channelValueLeft newState
+           , paymentResultValueReceived     = fromIntegral payVal
+           , paymentResultSettlementTxid    = Nothing
+           , paymentResultApplicationData   = appResData
            }
 
 

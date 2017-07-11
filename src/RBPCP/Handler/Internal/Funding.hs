@@ -1,40 +1,57 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module RBPCP.Handler.Internal.Funding
-( fundingProofM
-, unspentOuts
-, AddressFundingInfo(..)
+( module RBPCP.Handler.Internal.Funding
+, module X
 )
 where
 
 import MyPrelude
 import Network.HTTP.Types.Status                  (Status(..))
 import Servant.Client
+import RBPCP.Handler.Internal.BtcAddrIndex        as X
 import Network.Bitcoin.AddrIndex.API              ( PublishTx, UnspentOuts, TxOutProof
                                                   , Addr(..), PushTxReq(..)
                                                   , AddressFundingInfo(..), FundingProof
                                                   )
+import qualified PaymentChannel                       as PC
+import qualified RBPCP.Handler.Internal.BtcAddrIndex  as AddrIndex
+import qualified Network.Haskoin.Transaction          as HT
+import qualified Network.Haskoin.Crypto               as HC
+import qualified Network.Haskoin.Constants            as HCC
+import qualified Control.Monad.Reader                 as R
+import qualified Control.Monad.Logger                 as Log
 
-import qualified Network.Haskoin.Transaction      as HT
-import qualified Control.Monad.Catch              as Catch
-import qualified Network.Haskoin.Crypto           as HC
+
+newtype MonadBitcoin a = MonadBitcoin
+    { runBtcAddrIndex :: Log.LoggingT (R.ReaderT AddrIndexConf IO) a
+    }
+    deriving
+        ( Functor
+        , Applicative
+        , Monad
+        , R.MonadReader AddrIndexConf
+        , Log.MonadLogger
+        , R.MonadIO
+        )
+
+data AddrIndexConf
+  = AddrIndexConf
+  { aiscLivenetServer :: BaseUrl
+  , aiscTestnetServer :: BaseUrl
+  }
+
+runFunding :: MonadIO m => AddrIndexConf -> MonadBitcoin a -> m a
+runFunding cfg mf =
+    R.liftIO $ R.runReaderT (Log.runStdoutLoggingT $ runBtcAddrIndex mf) cfg
 
 
-unspentOuts :: HC.Address -> ClientM [AddressFundingInfo]
-unspentOuts = client api . Addr
-    where api :: Proxy UnspentOuts
-          api  = Proxy
+unspentFundingOuts :: PC.ChanParams -> MonadBitcoin [AddressFundingInfo]
+unspentFundingOuts cp = undefined -- AddrIndex.unspentOuts
 
-txOutProof :: HT.TxHash -> ClientM FundingProof
-txOutProof = client api
-    where api :: Proxy TxOutProof
-          api  = Proxy
 
-fundingProofM :: HT.TxHash -> ClientM (Maybe FundingProof)
-fundingProofM = maybe404 . client api
-       where api :: Proxy TxOutProof
-             api = Proxy
+fundingTx :: PC.ChanParams -> HT.TxHash -> MonadBitcoin (Maybe HT.Tx)
+fundingTx cp = undefined -- AddrIndex.fetchBtcTxM
 
-maybe404 :: ClientM a -> ClientM (Maybe a)
-maybe404 cm = Catch.try cm >>= getRes
-   where getRes (Right a) = return $ Just a
-         getRes (Left (FailureResponse (Status 404 _) _ _)) = return Nothing
-         getRes (Left ex) = Catch.throwM (ex :: ServantError)
+
+publishSettleTx :: HT.Tx -> MonadBitcoin ()
+publishSettleTx tx = undefined -- AddrIndex.publishTx

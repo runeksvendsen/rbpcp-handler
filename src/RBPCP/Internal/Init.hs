@@ -8,35 +8,37 @@ where
 import RBPCP.Handler.Internal.Types
 import MyPrelude
 import PaymentChannel.Types
-import qualified                                 Settings
+import Servant
+import qualified Servant.Client               as SC
+import qualified RBPCP.Internal.Manager       as Man
 import qualified Control.Concurrent.Cache     as Cache
-import qualified Bitcoin.SPV.Wallet           as Wall
 import qualified ChanDB                       as DB
 import qualified Control.Monad.Logger         as Log
 import qualified System.IO                    as IO
-import qualified System.ZMQ4                  as ZMQ
-import qualified Network.Haskoin.Constants    as HCC
-import qualified Database.Persist.Sqlite      as Sqlite
+import qualified BitcoinSigner.Lib.Signing    as Sign
 
+
+fetchXPub :: SC.ClientM RootPub
+fetchXPub :<|> _ :<|> _ :<|> _ = SC.client api
+    where api :: Proxy Sign.BTCSign
+          api  = Proxy
 
 appConf
     :: forall txM dbM handle. DB.ChanDBTx txM dbM handle
     => Proxy (txM ())           -- ^ Database implementation
-    -> ZMQ.Context
+    -> ServerConf
     -> IO (HandlerConf handle)
-appConf dbImpl ctx = do
+appConf dbImpl cfg = do
     man <- mkReqMan
     dbHandle <- DB.getHandle IO.stdout Log.LevelInfo
-    pkGetter <- createPubKeyGetter dbImpl (dbHandle :: handle) Settings.confServerExtPub
-    return $ HandlerConf dbHandle pkGetter man
+    serverXPub <- either (\e -> error $ "Failed to fetch XPub from bitcoin-signer: " ++ show e) return =<<
+        runServantClient man (scBitcoinSigner cfg) fetchXPub
+    -- pkGetter <- createPubKeyGetter dbImpl (dbHandle :: handle) serverXPub
+    return $ HandlerConf dbHandle man serverXPub cfg
 
---    let notifHandler = Log.runStdoutLoggingT . $(Log.logDebugSH)
---        btcNet = if HCC.getNetwork == HCC.prodnet then Wall.Prodnet else Wall.Testnet
---    iface <- Wall.spawnWalletSimple ctx (Wall.mkConfig btcNet Wall.LevelDebug walletDbConf) notifHandler
---  where
---    walletDbConf :: Sqlite.SqliteConf -- TODO: use memory?shared=1
---    walletDbConf = Sqlite.SqliteConf Settings.confSpvWalletCacheDir 1
+createPubKeyGetter = undefined
 
+{-
 createPubKeyGetter
     :: forall txM dbM handle. DB.ChanDBTx txM dbM handle
     => Proxy (txM ())           -- ^ Database implementation
@@ -50,7 +52,7 @@ createPubKeyGetter dbImpl dbHandle xpub = do
     cacheTimeoutSeconds = 10
     mkCache = Cache.createTimedCache (cacheTimeoutSeconds * 1000000) False 
     getCurrent :: dbM DB.KeyAtIndex
-    getCurrent = DB.pubKeyCurrent Settings.confServerExtPub
+    getCurrent = DB.pubKeyCurrent xpub
 
 initializeExternalPub
     :: forall txM dbM handle. DB.ChanDBTx txM dbM handle
@@ -64,3 +66,4 @@ initializeExternalPub _ dbHandle xpub =
     pkSetup :: dbM DB.KeyAtIndex
     pkSetup = DB.pubKeySetup xpub
     crashWithMsg = error . ("INIT: pubKeySetup fail: " ++) . show
+-}

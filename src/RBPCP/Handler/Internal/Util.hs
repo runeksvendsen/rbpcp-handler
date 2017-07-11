@@ -20,6 +20,16 @@ import qualified Servant.Server               as SS
 import qualified Servant.Client               as SC
 
 
+
+internalReq
+    :: (MonadIO m, HasReqMan m)
+    => SC.BaseUrl
+    -> SC.ClientM a
+    -> m (Either InternalError a)
+internalReq url req =
+    fmapL (RequestError url) <$> handlerReq url req
+
+
 runAtomic ::
     ( DB.ChanDBTx m dbM dbH
     , IsHandlerException e
@@ -44,7 +54,7 @@ runNonAtomic nonAtomicET = do
 
 
 maybeRedirect :: Monad m
-    => (RBPCP.BtcTxId, Word32, HC.Hash256)
+    => (RBPCP.BtcTxId, Word32, RBPCP.SharedSecret)
     -> RBPCP.PaymentData
     -> EitherT (HandlerErr e) m ()
 maybeRedirect (txid,vout,s) RBPCP.PaymentData{..} =
@@ -78,18 +88,15 @@ handleError ::
     , IsHandlerException e
     ) => e -> m a
 handleError =
-    throwError <=< logInternalErr . mkHandlerErr
+    throwError <=< logInternalErr
   where
-    logInternalErr e = when (SS.errHTTPCode e == 500)
-          (Log.runStdoutLoggingT ($(Log.logErrorSH) e))
-          >> return e
+    logInternalErr e = do
+        let httpError = mkHandlerErr e
+        when (SS.errHTTPCode httpError == 500) $
+            Log.runStdoutLoggingT ($(Log.logErrorSH) e)
+        return httpError
 
 handlerRunDb :: DB.ChanDB m dbH => m a -> HandlerM dbH a
 handlerRunDb m =
     getDbConf >>= liftIO . (`DB.runDB` m) >>= handleErrorE
 
-
-publishTx :: BitcoinTx -> SC.ClientM ()
-publishTx = void . SC.client api . PushTxReq
-    where api :: Proxy PublishTx
-          api  = Proxy

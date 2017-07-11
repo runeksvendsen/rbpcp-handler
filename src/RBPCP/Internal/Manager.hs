@@ -24,12 +24,12 @@ mkReqMan :: IO ReqMan
 mkReqMan = ReqMan <$> mkMan <*> mkMan
 
 
-runClientM
+runServantClient
     :: ReqMan
     -> SC.BaseUrl
     -> SC.ClientM a
     -> IO (Either SC.ServantError a)
-runClientM (ReqMan (HTTP httpMan) (HTTPS tlsMan)) url req = do
+runServantClient (ReqMan (HTTP httpMan) (HTTPS tlsMan)) url req = do
     let man = case SC.baseUrlScheme url of
           SC.Http  -> httpMan
           SC.Https -> tlsMan
@@ -47,4 +47,4 @@ handlerReq ::
     -> m (Either SC.ServantError a)
 handlerReq url req = do
     man <- getReqMan
-    liftIO $ runClientM man url req
+    liftIO $ runServantClient man url req

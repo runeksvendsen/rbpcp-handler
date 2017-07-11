@@ -1,12 +1,12 @@
-#resolver: lts-7.18
-resolver: nightly-2016-12-05
+resolver: lts-8.19
+#resolver: nightly-2016-12-05
 
 packages:
 ## App
 - '.'
 - '/Users/rune/IdeaProjects/blockchain-restful-address-index/blockchain-restful-address-index-api'
 - '/Users/rune/IdeaProjects/promissory-note-app/bitcoin-signer'
-- '/Users/rune/IdeaProjects/promissory-note-app/bitcoin-spv-wallet'
+#- '/Users/rune/IdeaProjects/promissory-note-app/bitcoin-spv-wallet'
 - '/Users/rune/IdeaProjects/promissory-note-app/rbpcp-api'
 - '/Users/rune/IdeaProjects/promissory-note-app/paychan-datastore'
 - '/Users/rune/IdeaProjects/promissory-note-app/promissory-note-types'
@@ -28,7 +28,7 @@ packages:
     git: https://github.com/runeksvendsen/bitcoin-payment-protocol.git
     commit: da60b36560ba48642f0c80f2944921d2ce7ef37d
   extra-dep: true
-#- location: ## APISpec.Blockchain
+#- location:
 #    git: https://github.com/runeksvendsen/blockchain-restful-address-index.git
 #    commit: 1aca098c0a26fe4c39d9901199696c648b2987c0
 #  extra-dep: true

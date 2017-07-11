@@ -67,48 +67,19 @@ import Control.Monad.Base         as X
 
 type BitcoinTx = HT.Tx
 
-type PubKeyGetter = IO (Either PubKeyDbException DB.KeyAtIndex)
+--type PubKeyGetter = IO (Either PubKeyDbException DB.KeyAtIndex)
 
-newtype PubKeyDbException = PubKeyDbException DB.ChanDBException
-    deriving (Eq, Show)
+--newtype PubKeyDbException = PubKeyDbException DB.ChanDBException
+--    deriving (Eq, Show)
 
-
-internalReq
-    :: (MonadIO m, HasReqMan m)
-    => SC.BaseUrl
-    -> SC.ClientM a
-    -> m (Either InternalError a)
-internalReq url req =
-    fmapL (RequestError url) <$> handlerReq url req
-
-
--- Handler error response
-newtype HandlerErrorMsg a = HandlerErrorMsg
-    { error_msg :: ShowIt a
-    } deriving (Eq, ToJSON)
-
-newtype ShowIt a = ShowIt { showIt :: a } deriving (Eq)
-instance Show a => ToJSON (ShowIt a) where
-    toJSON = String . cs . show . showIt
+showJsonStr :: ToJSON a => a -> String
+showJsonStr = cs . encode
 
 
 -- |We use this monad for the handlers, which gives them access to configuration data
 --  of type 'conf'.
 type AppM conf = ReaderT conf SS.Handler
 
-
-data UserError
-  = ResourceNotFound          -- 404
-  | ResourcePaymentMismatch RBPCP.BtcTxId Word32 HC.Hash256  -- redirect
-        deriving (Eq, Show)
-
-data InternalError
-  = RequestError BaseUrl SC.ServantError
-  | OtherInternalErr String
-      deriving Eq
-
-instance Show InternalError where
-    show = const "Internal Error"
 
 -- |Transform an 'AppM conf' into a 'Servant.Handler'
 readerToEither :: conf -> AppM conf SS.:~> SS.Handler
@@ -117,16 +88,7 @@ readerToEither cfg = SS.Nat $ \x -> runReaderT x cfg
 envRead :: Read a => String -> IO (Maybe a)
 envRead envVar = maybe Nothing readMaybe <$> lookupEnv envVar
 
-mkServantErr :: Show a => SS.ServantErr -> a -> SS.ServantErr
-mkServantErr se pce = se { SS.errBody = cs . encode . HandlerErrorMsg $ ShowIt pce }
-
-throwUserError :: (Show e, MonadError SS.ServantErr m) => e -> m a
-throwUserError = throwError . mkServantErr SS.err400
-
-throwServerError :: MonadError SS.ServantErr m => InternalError -> m a 
-throwServerError = throwError . mkServantErr SS.err500
-
-mkUrl :: RBPCP.BtcTxId -> Word32 -> HC.Hash256 -> T.Text
+mkUrl :: RBPCP.BtcTxId -> Word32 -> RBPCP.SharedSecret -> T.Text
 mkUrl h i s = ("/" <>) . cs . show $ SL.safeLink api endPoint h i (Just s)
     where api :: Proxy API.RBPCP
           api = Proxy

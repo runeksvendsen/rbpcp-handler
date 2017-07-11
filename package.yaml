@@ -7,6 +7,16 @@ copyright: 2017 Rune K. Svendsen
 license: BSD3
 github: runeksvendsen/rbpcp-handler
 
+flags:
+  bitcoin-testnet:
+    description: "Use Bitcoin's testnet3 network (for testing)"
+    manual: true
+    default: false
+  bitcoin-disabled:
+    description: "Disable Bitcoin queries completely (for testing/benchmarking)"
+    manual: true
+    default: false
+
 default-extensions:
 - RecordWildCards
 - OverloadedStrings
@@ -18,6 +28,7 @@ default-extensions:
 - TypeSynonymInstances
 - FlexibleInstances
 - ScopedTypeVariables
+- DeriveGeneric
 
 dependencies:
 - base >=4.7 && <5
@@ -25,7 +36,7 @@ dependencies:
 - bitcoin-payment-channel     >= 1.2 && < 1.3
 - bitcoin-signer
 - paychan-datastore
-- bitcoin-spv-wallet
+#- bitcoin-spv-wallet
 - blockchain-restful-address-index-api
 - promissory-note-types
 - rbpcp-api
@@ -55,6 +66,9 @@ dependencies:
 - persistent-sqlite
 - Concurrent-Cache
 - transformers-base
+- crypto-api
+- QuickCheck
+- pretty-show
 
 library:
   ghc-options:
@@ -65,34 +79,27 @@ library:
   - RBPCP.Handler.Open
   - RBPCP.Handler.Pay
   - RBPCP.Handler.Close
+  - RBPCP.Handler.Conf
   - RBPCP.Handler.Internal.Funding
+  - RBPCP.Internal.Manager
   - RBPCP.Server
   - RBPCP.App
-  - Settings
   - MyPrelude
   dependencies:
   - servant-server
   - wai
   - warp
 
-executables:
-  rbpcp-server:
-    main: Main.hs
-    source-dirs: app
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - rbpcp-handler
-
 tests:
   rbpcp-handler-test:
     other-modules:
     - TstPrelude
+    - TstUtil
     main: Spec.hs
     source-dirs: test
     dependencies:
     - rbpcp-handler
+    - servant-server
+    - async
     - hspec
     - QuickCheck
