@@ -45,13 +45,15 @@ runFunding cfg mf =
     R.liftIO $ R.runReaderT (Log.runStdoutLoggingT $ runBtcAddrIndex mf) cfg
 
 
-unspentFundingOuts :: PC.ChanParams -> MonadBitcoin [AddressFundingInfo]
-unspentFundingOuts cp = undefined -- AddrIndex.unspentOuts
+-- filterLogger :: (LogSource -> LogLevel -> Bool) -> LoggingT m a -> LoggingT m a
+
+--unspentFundingOuts :: PC.ChanParams -> MonadBitcoin [AddressFundingInfo]
+--unspentFundingOuts cp = undefined -- AddrIndex.unspentOuts
 
 
-fundingTx :: PC.ChanParams -> HT.TxHash -> MonadBitcoin (Maybe HT.Tx)
-fundingTx cp = undefined -- AddrIndex.fetchBtcTxM
+--fundingTx :: PC.ChanParams -> HT.TxHash -> MonadBitcoin (Maybe HT.Tx)
+--fundingTx cp = undefined -- AddrIndex.fetchBtcTxM
 
 
-publishSettleTx :: HT.Tx -> MonadBitcoin ()
-publishSettleTx tx = undefined -- AddrIndex.publishTx
+--publishSettleTx :: HT.Tx -> MonadBitcoin ()
+--publishSettleTx tx = undefined -- AddrIndex.publishTx

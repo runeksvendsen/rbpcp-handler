@@ -10,6 +10,7 @@ import qualified RBPCP.Server                 as Server
 import qualified Network.Wai                  as Wai
 import qualified RBPCP.Api                    as Api
 import qualified Network.Wai.Handler.Warp     as Warp
+import qualified Control.Monad.Logger                 as Log
 
 
 -- |
@@ -23,11 +24,11 @@ createApp dbImpl conf cb =
   where
     serverEmbedConf srv cfg = enter (readerToEither cfg) srv
 
-testApp :: Word -> Conf.ServerConf -> IO ()
-testApp port servConf = do
+testApp :: Log.LogLevel -> Word -> Conf.ServerConf -> IO ()
+testApp logLvl port servConf = do
     let datastoreDb :: Proxy (ChanDB.TxImpl ())
         datastoreDb = Proxy
         noOpCallback = Server.PaymentCallback $ \_ _ _ -> return (Server.CallbackResult $ Right "")
-    conf <- Init.appConf datastoreDb servConf
+    conf <- Init.appConf datastoreDb logLvl servConf
     putStrLn $ "Starting server on port " ++ show port
     Warp.run (fromIntegral port) $ createApp datastoreDb conf noOpCallback

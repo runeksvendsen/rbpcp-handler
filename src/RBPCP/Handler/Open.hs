@@ -20,17 +20,6 @@ runOpen openET = do
     runNonAtomic $ runReaderT openET cfg
 
 
---newtype OpenM m conf a = OpenM
---    { runOpenM :: ReaderT (HandlerConf conf) (EitherT (HandlerErr OpenErr) m) a
---    } deriving
---    ( Functor
---    , Applicative
---    , Log.MonadLogger
---    , Monad
---    , R.MonadReader (HandlerConf conf)
---    , MonadResource
---    )
-
 openE ::
      ( DB.ChanDB m conf )
     => RBPCP.BtcTxId
@@ -48,7 +37,7 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
     let txid = RBPCP.btcTxId fundTxId
     tx <- maybe (lift $ abortWithErr $ TxNotFound fundTxId) return
               =<< lift . hoistEither . fmapL InternalErr
-              =<< internalReq scProofServer (fetchBtcTxM txid)
+              =<< internalReq (proofServerUrl scProofServer) (fetchBtcTxM txid)
 
     --    2. Verify payment/Create state object
     chanState <- lift . abortOnErr =<< fmapL OpeningPaymentError <$>
@@ -62,7 +51,7 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
         -- Important: 'maybeRedirect' checks if 'fundTxId'/'fundIdx' and hash/idx in 'paymentData' match
         relevantAddrInfo afi = asiFundingTxId afi == txid && asiFundingVout afi == fundIdx
     addrFundInfoL <- lift . hoistEither . fmapL InternalErr
-                  =<< internalReq scProofServer (unspentOuts fundAddr)
+                  =<< internalReq (proofServerUrl scProofServer) (unspentOuts fundAddr)
     case filter relevantAddrInfo addrFundInfoL of
         []        -> lift $ abortWithErr SpentFundingOutput
         x@(_:_:_) -> error $ "BUG: Multiple outputs with same txid+vout: " ++ show x

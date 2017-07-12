@@ -1,6 +1,7 @@
 {-# LANGUAGE StrictData #-}
 module RBPCP.Handler.Conf
 ( module RBPCP.Handler.Conf
+, AI.AddrIndexServerUrl(..)
 , module RBPCP.Internal.Manager
 )
 where
@@ -10,7 +11,9 @@ import           RBPCP.Internal.Manager
 import qualified Control.Monad.Reader         as Reader
 import qualified Servant.Client               as SC
 import qualified PaymentChannel               as PC
---import qualified Network.Haskoin.Constants    as HCC
+import qualified Control.Monad.Logger         as Log
+import qualified Network.Bitcoin.AddrIndex.Types as AI
+
 
 data HandlerConf chanDb = HandlerConf
     { hcChanDb        :: chanDb
@@ -20,14 +23,18 @@ data HandlerConf chanDb = HandlerConf
     , hcManager       :: ReqMan
     , hcPubKey        :: PC.RootPub
     , hcServerConf    :: ServerConf
+    , hcLogLevel      :: Log.LogLevel
     }
 
 data ServerConf = ServerConf
     { scSettings      :: PC.ServerSettings
     , scMinBtcConf    :: Word
-    , scProofServer   :: SC.BaseUrl
+--    , scMinTxFee      :: PC.BtcAmount
+    , scProofServer   :: AI.AddrIndexServerUrl
     , scBitcoinSigner :: SC.BaseUrl
     }
+
+proofServerUrl = AI.getServerUrl
 
 instance Monad m => HasReqMan (Reader.ReaderT (HandlerConf a) m) where
     getReqMan = Reader.asks hcManager

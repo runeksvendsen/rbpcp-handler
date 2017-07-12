@@ -23,12 +23,12 @@ import qualified Control.Concurrent.Async       as Async
 import qualified Network.Haskoin.Crypto         as HC
 import qualified Network.Haskoin.Transaction    as HT
 import qualified Network.Bitcoin.AddrIndex.API  as Addr
+import qualified Control.Monad.Logger as Log
 
 
-
-genServerSettings :: PC.BtcAmount -> Gen PC.ServerSettings
-genServerSettings maxOpenPrice = do
-    arbOpenPrice <- choose (0, fromIntegral maxOpenPrice :: Word64)
+genServerSettings :: (PC.BtcAmount,PC.BtcAmount) -> Gen PC.ServerSettings
+genServerSettings (minOpenPrice, maxOpenPrice) = do
+    arbOpenPrice <- choose (fromIntegral minOpenPrice, fromIntegral maxOpenPrice :: Word64)
     return PC.ServerSettings
         { PC.serverConfDustLimit     = 6000
         , PC.serverConfSettlePeriod  = PC.MkHour 12
@@ -36,11 +36,11 @@ genServerSettings maxOpenPrice = do
         , PC.serverConfOpenPrice     = fromIntegral arbOpenPrice
         }
 
-mkTestConf :: PC.ServerSettings -> ServerConf
-mkTestConf serverSettings = ServerConf
+mkTestConf :: AddrIndexServerUrl -> PC.ServerSettings -> ServerConf
+mkTestConf addrIndexServer serverSettings = ServerConf
     { scSettings      = serverSettings
     , scMinBtcConf    = 1
-    , scProofServer   = BaseUrl Https "blockchaintest.runeks.me" 443 ""
+    , scProofServer   = addrIndexServer
     , scBitcoinSigner = BaseUrl Http  "localhost" 8081 ""
     }
 
@@ -63,7 +63,7 @@ loopFundingWait servCfg man fundInfo fundingAddr = do
                 let tx = fromMaybe (error "No tx with the txid returned by 'unspentOuts'") txM
                 return (tx, addrFundInfo)
   where
-    confProofServer = scProofServer servCfg
+    confProofServer = proofServerUrl $ scProofServer servCfg
     waitABit = threadDelay 10000000
     waitForFunding addr = fix $ \loop -> do
         addrFundInfoL <- testRunReq (confProofServer, man) "addrFundInfo" $ Funding.unspentOuts addr
@@ -71,15 +71,21 @@ loopFundingWait servCfg man fundInfo fundingAddr = do
             then waitABit >> loop
             else return $ last $ sortOn Addr.asiConfs addrFundInfoL
 
-withRbpcpServer :: PC.RootPrv -> PC.BtcAmount -> ((ServerConf, BaseUrl, ReqMan) -> IO ()) -> IO ()
-withRbpcpServer rootKey maxOpenPrice f = do
+withRbpcpServer
+    :: Log.LogLevel
+    -> (PC.RootPrv,SignApp.ServerConf)
+    -> (PC.BtcAmount,PC.BtcAmount)
+    -> ((ServerConf, BaseUrl, ReqMan) -> IO ())
+    -> IO ()
+withRbpcpServer logLvl (rootKey,signConf) minMaxOpenPrice f = do
     let serverUrl = BaseUrl Http "localhost" 8080 ""
-    servSettings <- generate (genServerSettings maxOpenPrice)
-    let cfg@ServerConf{..} = mkTestConf servSettings
+    servSettings <- generate (genServerSettings minMaxOpenPrice)
+    let cfg@ServerConf{..} = mkTestConf (SignApp.scBitcoinServer signConf) servSettings
     man <- mkReqMan
-    tidSignServ <- Async.async $ SignApp.signingAppMain (fromIntegral $ baseUrlPort scBitcoinSigner) rootKey
+    tidSignServ <- Async.async $ SignApp.signingAppMain
+          (fromIntegral $ baseUrlPort scBitcoinSigner) signConf rootKey
     waitForServer man scBitcoinSigner   -- # Waiting for signing-server to start...
-    tidRbpcpServer <- Async.async $ App.testApp (fromIntegral $ baseUrlPort serverUrl) cfg
+    tidRbpcpServer <- Async.async $ App.testApp logLvl (fromIntegral $ baseUrlPort serverUrl) cfg
     waitForServer man serverUrl         -- # Waiting for RBPCP-server to start...
     f (cfg, serverUrl, man)
     Async.cancel tidRbpcpServer

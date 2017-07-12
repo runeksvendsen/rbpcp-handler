@@ -42,7 +42,7 @@ closeE fundTxId fundIdx (Just secret) (RBPCP.Payment payData _) = do
 
     -- Ask bitcoin-signer to sign settlement tx
     servConf <- asks hcServerConf
-    let confProofServer = scProofServer servConf
+    let confProofServer = proofServerUrl $ scProofServer servConf
         confBitcoinSigner = scBitcoinSigner servConf
     tx <- lift . hoistEither . fmapL InternalErr =<< internalReq confBitcoinSigner (settleClosed closedServerChan)
 

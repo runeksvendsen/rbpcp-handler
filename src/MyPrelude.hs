@@ -63,7 +63,12 @@ import qualified Data.ByteString.Base16       as B16
 import Control.Monad.Reader as X
 import Control.Monad.Trans.Either as X
 import Control.Monad.Base         as X
+-- HEY
+import qualified Control.Monad.Logger                 as Log
 
+
+
+-- filterLogger :: (LogSource -> LogLevel -> Bool) -> LoggingT m a -> LoggingT m a
 
 type BitcoinTx = HT.Tx
 

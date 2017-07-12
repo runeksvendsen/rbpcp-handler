@@ -13,7 +13,9 @@ import qualified Network.Haskoin.Constants      as HCC
 import qualified Network.Bitcoin.AddrIndex.API  as Addr
 import qualified Control.Monad.Logger           as Log
 import qualified Text.Show.Pretty               as Pretty
-
+import qualified Network.Bitcoin.AddrIndex.Types as AI
+import qualified BitcoinSigner.App              as SignApp
+import qualified Util.Bitcoin.CoreFee               as Fee
 
 numMaxPayments :: Int
 numMaxPayments = 100
@@ -21,8 +23,20 @@ numMaxPayments = 100
 maxOpenPrice :: BtcAmount
 maxOpenPrice = 50000
 
+minOpenPrice :: BtcAmount
+minOpenPrice = 10000
+
+signConf :: SignApp.ServerConf
+signConf = SignApp.ServerConf (Fee.BlockDelay 18) addrIndexServer
+
+addrIndexServer :: AI.AddrIndexServerUrl
+addrIndexServer =
+    AI.AddrIndexServerUrl
+        (BaseUrl Https "blockchain.runeks.me" 443 "")
+        (BaseUrl Https "blockchaintest.runeks.me" 443 "")
+
 logLevel :: Log.LogLevel
-logLevel = Log.LevelInfo
+logLevel = Log.LevelError
 
 testServerRootKey :: PC.RootPrv
 testServerRootKey = PC.createRootPrv
@@ -34,7 +48,7 @@ main = HCC.switchToTestnet3 >> hspec spec
 spec :: Spec
 spec =
   describe "Payment channel" $
-    around (withRbpcpServer testServerRootKey maxOpenPrice) $
+    around (withRbpcpServer logLevel (testServerRootKey,signConf) (minOpenPrice, maxOpenPrice)) $
       it "can be funded, opened, paid to, closed" $ \(testConf, servUrl, man) -> do
         let runServReq :: String -> ClientM a -> IO a
             runServReq = testRunReq (servUrl, man)

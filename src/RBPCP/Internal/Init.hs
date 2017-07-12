@@ -26,17 +26,18 @@ fetchXPub :<|> _ :<|> _ :<|> _ = SC.client api
 appConf
     :: forall txM dbM handle. DB.ChanDBTx txM dbM handle
     => Proxy (txM ())           -- ^ Database implementation
+    -> Log.LogLevel
     -> ServerConf
     -> IO (HandlerConf handle)
-appConf dbImpl cfg = do
+appConf dbImpl logLvl cfg = do
     man <- mkReqMan
-    dbHandle <- DB.getHandle IO.stdout Log.LevelInfo
+    dbHandle <- DB.getHandle IO.stdout logLvl
     serverXPub <- either (\e -> error $ "Failed to fetch XPub from bitcoin-signer: " ++ show e) return =<<
         runServantClient man (scBitcoinSigner cfg) fetchXPub
     -- pkGetter <- createPubKeyGetter dbImpl (dbHandle :: handle) serverXPub
-    return $ HandlerConf dbHandle man serverXPub cfg
+    return $ HandlerConf dbHandle man serverXPub cfg logLvl
 
-createPubKeyGetter = undefined
+-- createPubKeyGetter = undefined
 
 {-
 createPubKeyGetter
