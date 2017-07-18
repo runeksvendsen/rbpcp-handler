@@ -37,6 +37,21 @@ fundingInfo
     -> SC.ClientM RBPCP.FundingInfo
 fundingInfo = SC.client (Proxy :: Proxy API.FundInfo)
 
+data RbpcpEndpoint
+  = ChanOpen
+  | ChanPay
+  | ChanClose
+
+rbpcpApi :: RBPCP.BtcTxId
+         -> RBPCP.Vout
+         -> Maybe RBPCP.SharedSecret
+         -> RbpcpEndpoint
+         -> PC.SignedPayment
+         -> SC.ClientM RBPCP.PaymentResult
+rbpcpApi tid vout ssM ChanOpen = chanOpen tid vout ssM . mkRbpcpPayment
+rbpcpApi tid vout ssM ChanPay = chanPay tid vout ssM . mkRbpcpPayment
+rbpcpApi tid vout ssM ChanClose = chanClose tid vout ssM . mkRbpcpPayment
+
 chanOpen :: RBPCP.BtcTxId
          -> RBPCP.Vout
          -> Maybe RBPCP.SharedSecret

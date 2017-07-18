@@ -1,4 +1,11 @@
-module RBPCP.Internal.Manager where
+module RBPCP.Internal.Manager
+( ReqMan
+, mkReqMan
+, runServantClient
+, HasReqMan(..)
+, handlerReq
+)
+where
 
 import qualified Servant.Client               as SC
 import Network.HTTP.Client

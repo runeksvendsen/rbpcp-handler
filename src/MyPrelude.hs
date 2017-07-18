@@ -13,7 +13,7 @@ module MyPrelude
 )
 where
 
-import RBPCP.Internal.Manager
+import RBPCP.Internal.Manager as X
 
 import Data.String (fromString)
 import Data.String.Conversions (cs)
@@ -65,21 +65,28 @@ import Control.Monad.Trans.Either as X
 import Control.Monad.Base         as X
 -- HEY
 import qualified Control.Monad.Logger                 as Log
+import Control.Exception                    (Exception)
 
 
-
--- filterLogger :: (LogSource -> LogLevel -> Bool) -> LoggingT m a -> LoggingT m a
+applyLogFilter :: Log.LogLevel -> Log.LoggingT m a -> Log.LoggingT m a
+applyLogFilter lvl =
+    Log.filterLogger logFunc
+  where
+    logFunc :: Log.LogSource -> Log.LogLevel -> Bool
+    logFunc _ logLvl = logLvl >= lvl
 
 type BitcoinTx = HT.Tx
 
---type PubKeyGetter = IO (Either PubKeyDbException DB.KeyAtIndex)
+data InternalError
+  = RequestError BaseUrl SC.ServantError
+  | OtherInternalErr String
+      deriving (Generic, Eq, Show)
 
---newtype PubKeyDbException = PubKeyDbException DB.ChanDBException
---    deriving (Eq, Show)
+instance Exception InternalError
+
 
 showJsonStr :: ToJSON a => a -> String
 showJsonStr = cs . encode
-
 
 -- |We use this monad for the handlers, which gives them access to configuration data
 --  of type 'conf'.

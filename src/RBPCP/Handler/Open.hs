@@ -2,7 +2,7 @@
 module RBPCP.Handler.Open where
 
 import RBPCP.Handler.Internal.Util
-import RBPCP.Handler.Internal.Funding
+import RBPCP.Handler.Internal.Blockchain
 
 import qualified Servant.Server               as SS
 import qualified RBPCP.Types                  as RBPCP
@@ -13,20 +13,22 @@ import qualified Control.Monad.Logger         as Log
 
 
 runOpen :: DB.ChanDB m dbH
-        => ReaderT (HandlerConf dbH) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
-        -> HandlerM dbH RBPCP.PaymentResult
+        => ReaderT (HandlerConf dbH chain) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
+        -> HandlerM dbH chain RBPCP.PaymentResult
 runOpen openET = do
     cfg <- getAppConf
     runNonAtomic $ runReaderT openET cfg
 
 
 openE ::
-     ( DB.ChanDB m conf )
+     ( DB.ChanDB m conf
+     , BlockchainRun m1 chain
+     )
     => RBPCP.BtcTxId
     -> Word32
     -> Maybe RBPCP.SharedSecret
     -> RBPCP.Payment
-    -> ReaderT (HandlerConf conf) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
+    -> ReaderT (HandlerConf db chain) (EitherT (HandlerErr OpenErr) m) RBPCP.PaymentResult
 openE _        _        Nothing       _                                  = lift $ left $ UserError ResourceNotFound
 openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
     lift $ maybeRedirect (fundTxId, fundIdx, secret) paymentData
@@ -35,9 +37,16 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
 
     --    1. Fetch alleged funding Bitcoin transaction
     let txid = RBPCP.btcTxId fundTxId
-    tx <- maybe (lift $ abortWithErr $ TxNotFound fundTxId) return
+        filterTxVout afi = asiFundingTxId afi == txid && asiFundingVout afi == fundIdx
+        findTx :: [AddrFunding] -> Maybe AddrFunding
+        findTx = listToMaybe . filter filterTxVout
+    cp <- lift . abortOnErr $ fmapL OpeningPaymentError (PC.validPaymentData scSettings paymentData)
+    (afi,tx) <- maybe (lift $ abortWithErr $ TxNotFound fundTxId) return
               =<< lift . hoistEither . fmapL InternalErr
-              =<< internalReq (proofServerUrl scProofServer) (fetchBtcTxM txid)
+              =<< handlerChainReq (getChannelFunding cp findTx)
+    let confs = asiConfs afi
+    when (fromIntegral confs < scMinBtcConf) $
+        lift $ abortWithErr $ InsufficientConfCount (fromIntegral confs) scMinBtcConf
 
     --    2. Verify payment/Create state object
     chanState <- lift . abortOnErr =<< fmapL OpeningPaymentError <$>
@@ -46,21 +55,7 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
     when (secret /= stateSecret) $
         lift $ abortWithErr $ BadSharedSecret stateSecret
 
-    --    3. Check if funding output is spent, plus confirmation count
-    let fundAddr = PC.fundingAddress chanState
-        -- Important: 'maybeRedirect' checks if 'fundTxId'/'fundIdx' and hash/idx in 'paymentData' match
-        relevantAddrInfo afi = asiFundingTxId afi == txid && asiFundingVout afi == fundIdx
-    addrFundInfoL <- lift . hoistEither . fmapL InternalErr
-                  =<< internalReq (proofServerUrl scProofServer) (unspentOuts fundAddr)
-    case filter relevantAddrInfo addrFundInfoL of
-        []        -> lift $ abortWithErr SpentFundingOutput
-        x@(_:_:_) -> error $ "BUG: Multiple outputs with same txid+vout: " ++ show x
-        [afi]     -> do
-            let confs = asiConfs afi
-            when (fromIntegral confs < scMinBtcConf) $
-                lift $ abortWithErr $ InsufficientConfCount (fromIntegral confs) scMinBtcConf
-
-    --    4. Check server pubkey
+    --    3. Check server pubkey
     rootPub <- asks hcPubKey
     chanStateX <- lift $ abortOnErr $ case PC.mkExtendedDerivRpc rootPub chanState of
         Just state -> Right state
@@ -68,8 +63,8 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
 
     --    5. ChanDB: Insert PayChanState
     lift $ lift $ DB.create chanStateX
-    liftIO $ putStrLn $ unwords
-        [ "Opened channel with server pubkey: ", show (PC.getPubKey $ PC.getRecvPubKey chanStateX) ]
+--    liftIO $ putStrLn $ unwords
+--        [ "Opened channel with server pubkey: ", show (PC.getPubKey $ PC.getRecvPubKey chanStateX) ]
 
     return RBPCP.PaymentResult
            { paymentResultChannelStatus     = RBPCP.ChannelOpen
@@ -82,7 +77,7 @@ openE fundTxId fundIdx (Just secret) (RBPCP.Payment paymentData _) = do
 
 data OpenErr
   = TxNotFound RBPCP.BtcTxId
-  | SpentFundingOutput
+--  | SpentFundingOutput
   | InsufficientConfCount Word Word
   | InitialPaymentShort PC.BtcAmount PC.BtcAmount
   | BadSharedSecret RBPCP.SharedSecret
@@ -101,7 +96,7 @@ instance Show OpenErr where
         , show tid -- TODO <-
         , "not found in blockchain"
         ]
-    show SpentFundingOutput = "channel funding output already spent"
+--    show SpentFundingOutput = "channel funding output already spent"
     show (InsufficientConfCount have need) = unwords
         [ "insufficient confirmation count. have"
         , show have

@@ -3,38 +3,37 @@ module RBPCP.Handler.Conf
 ( module RBPCP.Handler.Conf
 , AI.AddrIndexServerUrl(..)
 , module RBPCP.Internal.Manager
+, module X
 )
 where
 
 import           MyPrelude
 import           RBPCP.Internal.Manager
-import qualified Control.Monad.Reader         as Reader
-import qualified Servant.Client               as SC
-import qualified PaymentChannel               as PC
-import qualified Control.Monad.Logger         as Log
-import qualified Network.Bitcoin.AddrIndex.Types as AI
+import RBPCP.Handler.Internal.Blockchain          as X
+import qualified Control.Monad.Reader             as Reader
+import qualified Servant.Client                   as SC
+import qualified PaymentChannel                   as PC
+import qualified Control.Monad.Logger             as Log
+import qualified Network.Bitcoin.AddrIndex.Types  as AI
 
 
-data HandlerConf chanDb = HandlerConf
+data HandlerConf chanDb btcNet = HandlerConf
     { hcChanDb        :: chanDb
-    -- | The server's channel public keys are derived from this key.
-    --   Every time a client opens a channel, a new key is derived and handed out to new clients.
---    , hcCurrPubKey    :: PubKeyGetter
     , hcManager       :: ReqMan
     , hcPubKey        :: PC.RootPub
-    , hcServerConf    :: ServerConf
+    , hcServerConf    :: ServerConf btcNet
     , hcLogLevel      :: Log.LogLevel
     }
 
-data ServerConf = ServerConf
+data ServerConf btcNet = ServerConf
     { scSettings      :: PC.ServerSettings
     , scMinBtcConf    :: Word
---    , scMinTxFee      :: PC.BtcAmount
-    , scProofServer   :: AI.AddrIndexServerUrl
     , scBitcoinSigner :: SC.BaseUrl
+      -- | See 'BtcNetwork'. (How) do we fetch information from the Bitcoin blockchain?
+    , scBlockchainCfg :: BlockchainConf btcNet
     }
 
-proofServerUrl = AI.getServerUrl
+--proofServerUrl = AI.getServerUrl
 
-instance Monad m => HasReqMan (Reader.ReaderT (HandlerConf a) m) where
+instance Monad m => HasReqMan (Reader.ReaderT (HandlerConf a b) m) where
     getReqMan = Reader.asks hcManager

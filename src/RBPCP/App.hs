@@ -14,17 +14,27 @@ import qualified Control.Monad.Logger                 as Log
 
 
 -- |
-createApp :: ChanDB.ChanDBTx txM dbM dbH
+createApp :: forall txM dbM dbH chain chainM.
+             ( ChanDB.ChanDBTx txM dbM dbH
+             , Conf.BlockchainRun chainM chain
+             )
           => Proxy (txM ())           -- ^ Database implementation
-          -> Conf.HandlerConf dbH
+          -> Conf.HandlerConf dbH chain
           -> Server.PaymentCallback
           -> Wai.Application
-createApp dbImpl conf cb =
-    serve (Proxy :: Proxy Api.RBPCP) $ serverEmbedConf (Server.createServer dbImpl cb) conf
+createApp _ conf cb =
+    serve (Proxy :: Proxy Api.RBPCP) $ serverEmbedConf
+        (Server.createServer dbChainImpl cb :: ServerT Api.RBPCP (Init.HandlerM dbH chain)) conf
   where
+    dbChainImpl :: Proxy (txM (),chain)
+    dbChainImpl = Proxy
     serverEmbedConf srv cfg = enter (readerToEither cfg) srv
 
-testApp :: Log.LogLevel -> Word -> Conf.ServerConf -> IO ()
+testApp :: forall chain chainM. Conf.BlockchainRun chainM chain
+        => Log.LogLevel
+        -> Word
+        -> Conf.ServerConf chain
+        -> IO ()
 testApp logLvl port servConf = do
     let datastoreDb :: Proxy (ChanDB.TxImpl ())
         datastoreDb = Proxy

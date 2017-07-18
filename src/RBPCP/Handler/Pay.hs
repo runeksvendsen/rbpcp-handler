@@ -40,7 +40,7 @@ newtype CallbackResult = CallbackResult (Either T.Text T.Text)
 runPay :: DB.ChanDBTx m dbM dbH
     => PaymentCallback
     -> ReaderT PaymentCallback (EitherT (HandlerErr PaymentError) m) RBPCP.PaymentResult
-    -> HandlerM dbH RBPCP.PaymentResult
+    -> HandlerM dbH chain RBPCP.PaymentResult
 runPay cbFunc payM =
     runAtomic $ runReaderT payM cbFunc
 

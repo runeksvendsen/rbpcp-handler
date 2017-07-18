@@ -18,7 +18,7 @@ import qualified Network.Haskoin.Crypto       as HC
 import qualified Control.Monad.Logger         as Log
 import qualified Servant.Server               as SS
 import qualified Servant.Client               as SC
-
+import qualified RBPCP.Handler.Internal.Blockchain as Chain
 
 
 internalReq
@@ -29,13 +29,26 @@ internalReq
 internalReq url req =
     fmapL (RequestError url) <$> handlerReq url req
 
+handlerChainReq
+    ::
+    ( MonadIO m
+    , Reader.MonadReader (HandlerConf db chain) m
+    , Chain.BlockchainRun m1 chain
+    , HasReqMan m
+    )
+    => m1 a
+    -> m (Either InternalError a)
+handlerChainReq chainM = do
+    man <- getReqMan
+    cfg <- asks hcServerConf
+    liftIO $ runBlockchain man (scBlockchainCfg cfg) chainM
 
 runAtomic ::
     ( DB.ChanDBTx m dbM dbH
     , IsHandlerException e
     )
     => EitherT (HandlerErr e) m a
-    -> HandlerM dbH a
+    -> HandlerM dbH chain a
 runAtomic atomicET = do
     cfg <- getDbConf
     let atomic = DB.atomically DB.PayChanDB cfg $ runEitherT atomicET
@@ -46,7 +59,7 @@ runNonAtomic ::
     , IsHandlerException e
     )
     => EitherT (HandlerErr e) m a
-    -> HandlerM dbH a
+    -> HandlerM dbH chain a
 runNonAtomic nonAtomicET = do
     cfg <- getDbConf
     let nonAtomic = DB.runDB cfg $ runEitherT nonAtomicET
@@ -96,7 +109,7 @@ handleError =
             Log.runStdoutLoggingT ($(Log.logErrorSH) e)
         return httpError
 
-handlerRunDb :: DB.ChanDB m dbH => m a -> HandlerM dbH a
+handlerRunDb :: DB.ChanDB m dbH => m a -> HandlerM dbH chain a
 handlerRunDb m =
     getDbConf >>= liftIO . (`DB.runDB` m) >>= handleErrorE
 

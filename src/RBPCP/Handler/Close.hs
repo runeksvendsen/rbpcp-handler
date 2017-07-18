@@ -12,26 +12,27 @@ import qualified ChanDB                               as DB
 import qualified Network.Haskoin.Crypto               as HC
 import qualified Network.Haskoin.Transaction          as HT
 import qualified BitcoinSigner.Lib.Signing            as Sign
+import qualified RBPCP.Handler.Internal.Blockchain    as Chain
 -- DEBUG
 import Data.ByteString.Base16                         as B16
 import qualified Data.Serialize                 as Bin
 
 
 runClose :: DB.ChanDBTx m dbM dbH
-         => ReaderT (HandlerConf dbH) (EitherT (HandlerErr PC.PayChanError) m) RBPCP.PaymentResult
-         -> HandlerM dbH RBPCP.PaymentResult
+         => ReaderT (HandlerConf dbH chain) (EitherT (HandlerErr PC.PayChanError) m) RBPCP.PaymentResult
+         -> HandlerM dbH chain RBPCP.PaymentResult
 runClose closeRET = do
     conf <- getAppConf
     runAtomic $ runReaderT closeRET conf
 
 closeE :: ( DB.ChanDBTx m dbM dbH
-          -- , MonadIO m
+          , BlockchainRun m1 chain
           ) =>
          RBPCP.BtcTxId
       -> Word32
       -> Maybe RBPCP.SharedSecret
       -> RBPCP.Payment
-      -> ReaderT (HandlerConf dbH) (EitherT (HandlerErr PC.PayChanError) m) RBPCP.PaymentResult
+      -> ReaderT (HandlerConf dbH chain) (EitherT (HandlerErr PC.PayChanError) m) RBPCP.PaymentResult
 closeE _        _        Nothing       _                        = lift $ generalErr $ UserError ResourceNotFound
 closeE fundTxId fundIdx (Just secret) (RBPCP.Payment payData _) = do
     lift $ maybeRedirect (fundTxId, fundIdx, secret) payData
@@ -42,15 +43,14 @@ closeE fundTxId fundIdx (Just secret) (RBPCP.Payment payData _) = do
 
     -- Ask bitcoin-signer to sign settlement tx
     servConf <- asks hcServerConf
-    let confProofServer = proofServerUrl $ scProofServer servConf
-        confBitcoinSigner = scBitcoinSigner servConf
+    let confBitcoinSigner = scBitcoinSigner servConf
     tx <- lift . hoistEither . fmapL InternalErr =<< internalReq confBitcoinSigner (settleClosed closedServerChan)
 
     -- Publish tx
-    -- ### DEBUG
-    liftIO . putStrLn . cs . B16.encode . Bin.encode $ tx
---    error "Tx dump"
-    lift . hoistEither . fmapL InternalErr =<< internalReq confProofServer (AddrIndex.publishTx tx)
+--    liftIO . putStrLn . cs . B16.encode . Bin.encode $ tx
+    lift . hoistEither . fmapL InternalErr =<< handlerChainReq (Chain.publishTx tx)
+
+    -- lift . hoistEither . fmapL InternalErr =<< internalReq confProofServer (AddrIndex.publishTx tx)
 
     -- TODO: closedServerChan ready for next payment/settle tx?
     lift $ lift $ DB.updatePayChan (PC.getClosedState closedServerChan)

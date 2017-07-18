@@ -24,11 +24,11 @@ fetchXPub :<|> _ :<|> _ :<|> _ = SC.client api
           api  = Proxy
 
 appConf
-    :: forall txM dbM handle. DB.ChanDBTx txM dbM handle
+    :: forall txM dbM dbHandle chain. DB.ChanDBTx txM dbM dbHandle
     => Proxy (txM ())           -- ^ Database implementation
     -> Log.LogLevel
-    -> ServerConf
-    -> IO (HandlerConf handle)
+    -> ServerConf chain
+    -> IO (HandlerConf dbHandle chain)
 appConf dbImpl logLvl cfg = do
     man <- mkReqMan
     dbHandle <- DB.getHandle IO.stdout logLvl

@@ -21,6 +21,7 @@ default-extensions:
 - RecordWildCards
 - OverloadedStrings
 - MultiParamTypeClasses
+- FunctionalDependencies
 - DataKinds
 - FlexibleContexts
 - LambdaCase
@@ -80,7 +81,8 @@ library:
   - RBPCP.Handler.Pay
   - RBPCP.Handler.Close
   - RBPCP.Handler.Conf
-  - RBPCP.Handler.Internal.Funding
+  - RBPCP.Handler.Internal.Blockchain
+  - RBPCP.Handler.Internal.Funding.Test
   - RBPCP.Internal.Manager
   - RBPCP.Server
   - RBPCP.App
@@ -89,6 +91,21 @@ library:
   - servant-server
   - wai
   - warp
+
+
+executables:
+  rbpcp-handler-prompt:
+    other-modules:
+    - TstPrelude
+    - TstUtil
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+    - rbpcp-handler
+    - servant-server
+    - async
+    - hspec
+    - QuickCheck
 
 tests:
   rbpcp-handler-test:
@@ -103,3 +120,7 @@ tests:
     - async
     - hspec
     - QuickCheck
+    ghc-options:
+    - -W
+    - -dcore-lint
+    - -debug

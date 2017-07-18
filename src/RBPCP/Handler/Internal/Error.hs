@@ -30,11 +30,6 @@ data UserError
   | ResourcePaymentMismatch RBPCP.BtcTxId Word32 RBPCP.SharedSecret  -- redirect
         deriving (Generic, Eq, Show)
 
-data InternalError
-  = RequestError BaseUrl SC.ServantError
-  | OtherInternalErr String
-      deriving (Generic, Eq, Show)
-
 class HasErrorResponse e where
     errRes :: e -> T.Text
 
